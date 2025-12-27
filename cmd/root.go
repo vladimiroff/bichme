@@ -17,8 +17,10 @@ import (
 var (
 	verbose     bool   // sets DEBUG as default log level when enabled
 	historyPath string // defines where are executions logged.
+	uploadPath  string // defines where are files uploaded.
 
-	defaultPath = os.ExpandEnv("$HOME/.local/state/bichme/history/")
+	defaultHistoryPath = os.ExpandEnv("$HOME/.local/state/bichme/history/")
+	defaultUploadPath  = ".cache/bichme/"
 )
 
 // Arguments that are used by both shell and exec
@@ -46,6 +48,7 @@ func opts() bichme.Opts {
 		ExecTimeout: executeTimeout,
 		History:     history,
 		HistoryPath: historyPath,
+		UploadPath:  uploadPath,
 	}
 }
 
@@ -105,6 +108,7 @@ func defaultUser() string {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&historyPath, "history-path", defaultPath, "where to store history")
+	rootCmd.PersistentFlags().StringVar(&historyPath, "history-path", defaultHistoryPath, "where to store history")
+	rootCmd.PersistentFlags().StringVar(&uploadPath, "upload-path", defaultUploadPath, "where to upload files on remote machines")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enables debug output")
 }

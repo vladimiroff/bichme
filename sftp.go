@@ -16,7 +16,7 @@ func Upload(c *sftp.Client, dir string, files ...string) error {
 	}
 
 	if err := c.Chmod(dir, 0700); err != nil {
-		return fmt.Errorf("chmod %q: %w", dir, err)
+		return fmt.Errorf("chmod 0700 %q: %w", dir, err)
 	}
 
 	for _, file := range files {
@@ -34,7 +34,7 @@ func Upload(c *sftp.Client, dir string, files ...string) error {
 		defer remote.Close()
 
 		if err := c.Chmod(filename, 0600); err != nil {
-			return fmt.Errorf("chmod %q: %w", filename, err)
+			return fmt.Errorf("chmod 0600 %q: %w", filename, err)
 		}
 
 		if _, err := io.Copy(remote, local); err != nil {

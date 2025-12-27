@@ -17,6 +17,8 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 )
 
+var id = runID()
+
 type conn struct {
 	host    string
 	tries   int
@@ -45,6 +47,7 @@ type Opts struct {
 	ExecTimeout time.Duration
 	History     bool
 	HistoryPath string
+	UploadPath  string
 }
 
 func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
@@ -73,10 +76,8 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		}(ch)
 	}
 
-	t := time.Now()
-	artifactName := fmt.Sprintf("%s.%d", t.Format(time.TimeOnly), os.Getpid())
 	if opts.History {
-		opts.HistoryPath = filepath.Join(opts.HistoryPath, t.Format(time.DateOnly), artifactName)
+		opts.HistoryPath = filepath.Join(opts.HistoryPath, id)
 		if err := os.MkdirAll(opts.HistoryPath, 0700); err != nil {
 			slog.Error("failed to initialize history", "error", err)
 			opts.History = false
@@ -150,19 +151,18 @@ func run(ctx context.Context, c *conn, cmd string, opts Opts) error {
 		}
 		defer c.sftp.Close()
 
-		// TODO: untangle this artifact name mess
-		remoteDir := filepath.Join(".bichme", filepath.Base(opts.HistoryPath))
+		remoteDir := filepath.Join(opts.UploadPath, id)
 
 		if err := Upload(c.sftp, remoteDir, opts.Files...); err != nil {
 			return fmt.Errorf("upload: %w", err)
 		}
 
 		slog.Debug("MakeExec", "files", opts.Files, "cmd", cmd, "remoteDir", remoteDir)
-		if cmdFile := "./" + filepath.Base(opts.Files[len(opts.Files)-1]); cmdFile == cmd {
-			if err := MakeExec(c.sftp, filepath.Join(remoteDir, cmdFile)); err != nil {
+		if cmd == "" {
+			cmd = "./" + filepath.Join(remoteDir, filepath.Base(opts.Files[0]))
+			if err := MakeExec(c.sftp, cmd); err != nil {
 				return fmt.Errorf("make exec: %w", err)
 			}
-			cmd = filepath.Join(remoteDir, cmdFile)
 		}
 	}
 

@@ -36,9 +36,10 @@ var execCmd = &cobra.Command{
 		if info.IsDir() {
 			return fmt.Errorf("can not execute directory")
 		}
-		files = append(files, args[1])
+		files = append([]string{args[1]}, files...)
+		// TODO: duplicated hosts would probably go berserk
 
-		return bichme.Run(cmd.Context(), hosts, "./"+info.Name(), opts())
+		return bichme.Run(cmd.Context(), hosts, "", opts())
 	},
 }
 

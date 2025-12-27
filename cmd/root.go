@@ -1,10 +1,15 @@
 package cmd
 
 import (
+	"bufio"
+	"context"
 	"log/slog"
 	"os"
 	osUser "os/user"
+	"strings"
 	"time"
+
+	"bichme"
 
 	"github.com/spf13/cobra"
 )
@@ -28,6 +33,40 @@ var (
 	executeTimeout time.Duration
 )
 
+// opts populates cli args into bichme.Opts.
+func opts() bichme.Opts {
+	return bichme.Opts{
+		User:        user,
+		Port:        port,
+		Retries:     retries,
+		Workers:     workers,
+		ConnTimeout: connectTimeout,
+		ExecTimeout: executeTimeout,
+		History:     history,
+		HistoryPath: historyPath,
+	}
+}
+
+// readLines reads filename and returns non-empty lines.
+func readLines(filename string) ([]string, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if len(line) == 0 || line[0] == '#' {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	return lines, nil
+}
+
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "bichme",
@@ -37,8 +76,8 @@ var rootCmd = &cobra.Command{
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute() {
-	err := rootCmd.Execute()
+func Execute(ctx context.Context) {
+	err := rootCmd.ExecuteContext(ctx)
 	if err != nil {
 		os.Exit(1)
 	}

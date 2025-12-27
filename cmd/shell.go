@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"bichme"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -11,10 +14,20 @@ import (
 var shellCmd = &cobra.Command{
 	Use:   "shell <servers> <command>",
 	Short: "Run a single command on multiple machines",
-	Args:  cobra.ExactArgs(2),
+	Args:  cobra.MinimumNArgs(2),
+	PreRunE: func(_ *cobra.Command, _ []string) error {
+		return errors.Join(
+			minInt("port", port, 1), maxInt("port", port, 65535),
+			minInt("workers", workers, 1),
+			minLen("user", user, 1),
+		)
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Printf("shell %q %q\n", args[0], args[1])
-		return nil
+		hosts, err := readLines(args[0])
+		if err != nil {
+			return fmt.Errorf("read servers: %w", err)
+		}
+		return bichme.Run(cmd.Context(), hosts, strings.Join(args[1:], " "), opts())
 	},
 }
 

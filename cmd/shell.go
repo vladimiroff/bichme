@@ -1,13 +1,14 @@
 package cmd
 
 import (
-	"bichme"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"bichme"
 )
 
 // shellCmd run a single command on multiple machines.

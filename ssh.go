@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -21,17 +22,25 @@ type conn struct {
 	tries   int
 	opts    *Opts
 	config  *ssh.ClientConfig
-	client  *ssh.Client
+	ssh     *ssh.Client
+	sftp    *sftp.Client
 	connErr error
 	execErr error
 	output  io.ReadWriteCloser
 }
 
+//TODO: conn.Close()
+
+// Opts is a quick and dirty way to pass CLI args from ./cmd, without having a
+// special "Runner" type or tossing around things in the global namespace.
+//
+// TODO: figure out a saner approach.
 type Opts struct {
 	User        string
 	Port        int
 	Retries     int
 	Workers     int
+	Files       []string
 	ConnTimeout time.Duration
 	ExecTimeout time.Duration
 	History     bool
@@ -58,17 +67,16 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			for conn := range ch {
 				// TODO: retries
 				slog.Debug("Running", "host", conn.host)
-				err := run(ctx, conn, cmd)
+				err := run(ctx, conn, cmd, opts)
 				slog.Debug("Done", "host", conn.host, "error", err)
 			}
 		}(ch)
 	}
 
+	t := time.Now()
+	artifactName := fmt.Sprintf("%s.%d", t.Format(time.TimeOnly), os.Getpid())
 	if opts.History {
-		t := time.Now()
-		date := t.Format(time.DateOnly)
-		time := t.Format(time.TimeOnly)
-		opts.HistoryPath = filepath.Join(opts.HistoryPath, date, fmt.Sprintf("%s.%d", time, os.Getpid()))
+		opts.HistoryPath = filepath.Join(opts.HistoryPath, t.Format(time.DateOnly), artifactName)
 		if err := os.MkdirAll(opts.HistoryPath, 0700); err != nil {
 			slog.Error("failed to initialize history", "error", err)
 			opts.History = false
@@ -100,7 +108,7 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	return nil
 }
 
-func run(ctx context.Context, c *conn, cmd string) error {
+func run(ctx context.Context, c *conn, cmd string, opts Opts) error {
 	out := NewOutput(c.host)
 	if c.opts.History {
 		filename := filepath.Join(c.opts.HistoryPath, fmt.Sprintf("%s.%d.log", c.host, c.tries))
@@ -118,22 +126,46 @@ func run(ctx context.Context, c *conn, cmd string) error {
 	if !strings.Contains(host, ":") {
 		host += fmt.Sprintf(":%d", c.opts.Port)
 	}
-	client, err := dialContext(ctx, "tcp", host, c.config)
+	var err error
+	c.ssh, err = dialContext(ctx, "tcp", host, c.config)
 	if err != nil {
 		c.connErr = fmt.Errorf("dial: %w", err)
 		return err
 	}
-	defer client.Close()
+	defer c.ssh.Close()
 
-	session, err := client.NewSession()
+	session, err := c.ssh.NewSession()
 	if err != nil {
 		c.connErr = fmt.Errorf("session: %w", err)
 		return err
 	}
 	defer session.Close()
-
 	session.Stderr = out
 	session.Stdout = out
+
+	if len(opts.Files) > 0 {
+		c.sftp, err = sftp.NewClient(c.ssh)
+		if err != nil {
+			return fmt.Errorf("open sftp session: %w", err)
+		}
+		defer c.sftp.Close()
+
+		// TODO: untangle this artifact name mess
+		remoteDir := filepath.Join(".bichme", filepath.Base(opts.HistoryPath))
+
+		if err := Upload(c.sftp, remoteDir, opts.Files...); err != nil {
+			return fmt.Errorf("upload: %w", err)
+		}
+
+		slog.Debug("MakeExec", "files", opts.Files, "cmd", cmd, "remoteDir", remoteDir)
+		if cmdFile := "./" + filepath.Base(opts.Files[len(opts.Files)-1]); cmdFile == cmd {
+			if err := MakeExec(c.sftp, filepath.Join(remoteDir, cmdFile)); err != nil {
+				return fmt.Errorf("make exec: %w", err)
+			}
+			cmd = filepath.Join(remoteDir, cmdFile)
+		}
+	}
+
 	errCh := make(chan error)
 	go func() { errCh <- session.Run(cmd) }()
 	select {

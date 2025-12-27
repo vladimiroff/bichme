@@ -28,6 +28,7 @@ var (
 	retries int
 	history bool
 	workers int
+	files   []string
 
 	connectTimeout time.Duration
 	executeTimeout time.Duration
@@ -40,6 +41,7 @@ func opts() bichme.Opts {
 		Port:        port,
 		Retries:     retries,
 		Workers:     workers,
+		Files:       files,
 		ConnTimeout: connectTimeout,
 		ExecTimeout: executeTimeout,
 		History:     history,

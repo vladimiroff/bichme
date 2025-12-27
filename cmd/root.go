@@ -69,8 +69,14 @@ func readLines(filename string) ([]string, error) {
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "bichme",
-	Short: "Utility for quick and dirty execution on multiple machines at once",
+	Use:     "bichme",
+	Short:   "Utility for quick and dirty execution on multiple machines at once",
+	Version: bichme.Version(),
+	PersistentPreRun: func(_ *cobra.Command, _ []string) {
+		if verbose {
+			slog.SetLogLoggerLevel(slog.LevelDebug)
+		}
+	},
 	// Long:  "", // TODO
 }
 

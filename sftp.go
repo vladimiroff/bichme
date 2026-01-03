@@ -1,16 +1,22 @@
 package bichme
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/pkg/sftp"
 )
 
-// Upload files via active ssh client to given directory.
-func Upload(c *sftp.Client, dir string, files ...string) error {
+// upload files via active ssh client to given directory.
+func upload(ctx context.Context, c *sftp.Client, dir string, files ...string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if err := c.MkdirAll(dir); err != nil {
 		return fmt.Errorf("create upload dir: %w", err)
 	}
@@ -20,6 +26,10 @@ func Upload(c *sftp.Client, dir string, files ...string) error {
 	}
 
 	for _, file := range files {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		local, err := os.Open(file)
 		if err != nil {
 			return fmt.Errorf("open %q: %w", file, err)
@@ -46,10 +56,26 @@ func Upload(c *sftp.Client, dir string, files ...string) error {
 }
 
 // MakeExec makes a file executable.
-func MakeExec(c *sftp.Client, filename string) error {
+func MakeExec(ctx context.Context, c *sftp.Client, filename string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if err := c.Chmod(filename, 0700); err != nil {
 		return fmt.Errorf("chmod 0700 %q: %w", filename, err)
 	}
 
 	return nil
+}
+
+func sftpIsAlive(c *sftp.Client) bool {
+	var err error
+	defer func() {
+		if err != nil {
+			slog.Debug("sftpsAlive failed", "error", err)
+		}
+	}()
+
+	_, err = c.Getwd()
+	return err == nil
 }

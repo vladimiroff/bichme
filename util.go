@@ -2,8 +2,11 @@ package bichme
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 func runID() string {
@@ -12,4 +15,20 @@ func runID() string {
 		t.Format(time.DateOnly),
 		t.Format(time.TimeOnly), os.Getpid(),
 	)
+}
+
+func sshIsAlive(c *ssh.Client) bool {
+	var err error
+	defer func() {
+		if err != nil {
+			slog.Debug("sshIsAlive failed", "error", err)
+		}
+	}()
+	s, err := c.NewSession()
+	if err != nil {
+		return false
+	}
+
+	err = s.Wait()
+	return err == nil
 }

@@ -2,8 +2,6 @@ package bichme
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -12,26 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
 
 var id = runID()
-
-type conn struct {
-	host    string
-	tries   int
-	opts    *Opts
-	config  *ssh.ClientConfig
-	ssh     *ssh.Client
-	sftp    *sftp.Client
-	connErr error
-	execErr error
-	output  io.ReadWriteCloser
-}
-
-//TODO: conn.Close()
 
 // Opts is a quick and dirty way to pass CLI args from ./cmd, without having a
 // special "Runner" type or tossing around things in the global namespace.
@@ -50,6 +33,11 @@ type Opts struct {
 	UploadPath  string
 }
 
+type jobResult struct {
+	host string
+	err  error
+}
+
 func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	var auths []ssh.AuthMethod
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
@@ -60,20 +48,18 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		}
 	}
 
-	ch := make(chan *conn)
+	jobCh := make(chan *Job)
+	resCh := make(chan jobResult)
 	var wg sync.WaitGroup
 	wg.Add(opts.Workers)
 	for range opts.Workers {
-		go func(ch <-chan *conn) {
+		go func() {
 			defer wg.Done()
 
-			for conn := range ch {
-				// TODO: retries
-				slog.Debug("Running", "host", conn.host)
-				err := run(ctx, conn, cmd, opts)
-				slog.Debug("Done", "host", conn.host, "error", err)
+			for job := range jobCh {
+				resCh <- jobResult{host: job.host, err: job.Start(ctx)}
 			}
-		}(ch)
+		}()
 	}
 
 	if opts.History {
@@ -84,8 +70,8 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		}
 	}
 
-	conns := make([]*conn, len(servers))
-	for i, server := range servers {
+	jobs := make(map[string]*Job, len(servers))
+	for _, server := range servers {
 		cfg := &ssh.ClientConfig{
 			User:            opts.User,
 			Auth:            auths,
@@ -100,103 +86,35 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			server = parts[1]
 		}
 
-		conns[i] = &conn{host: server, config: cfg, opts: &opts}
-		ch <- conns[i]
+		jobs[server] = &Job{
+			host:   server,
+			cmd:    cmd,
+			opts:   &opts,
+			config: cfg,
+			tasks:  ExecTask,
+			// cleanup: true,
+		}
+		if len(opts.Files) > 0 {
+			jobs[server].tasks.Set(UploadTask)
+		}
+		jobCh <- jobs[server]
 	}
 
-	close(ch)
-	wg.Wait()
-	return nil
-}
-
-func run(ctx context.Context, c *conn, cmd string, opts Opts) error {
-	out := NewOutput(c.host)
-	if c.opts.History {
-		filename := filepath.Join(c.opts.HistoryPath, fmt.Sprintf("%s.%d.log", c.host, c.tries))
-		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-		if err != nil {
-			slog.Error("Failed to open output file", "host", c.host, "error", err)
+	for res := range resCh {
+		slog.Debug("Exec", "host", res.host, "try", jobs[res.host].tries, "error", res.err)
+		if jobs[res.host].tasks.Done() {
+			delete(jobs, res.host)
 		} else {
-			out.SetFile(f)
-		}
-	}
-	defer out.Close()
-
-	c.tries++
-	host := c.host
-	if !strings.Contains(host, ":") {
-		host += fmt.Sprintf(":%d", c.opts.Port)
-	}
-	var err error
-	c.ssh, err = dialContext(ctx, "tcp", host, c.config)
-	if err != nil {
-		c.connErr = fmt.Errorf("dial: %w", err)
-		return err
-	}
-	defer c.ssh.Close()
-
-	session, err := c.ssh.NewSession()
-	if err != nil {
-		c.connErr = fmt.Errorf("session: %w", err)
-		return err
-	}
-	defer session.Close()
-	session.Stderr = out
-	session.Stdout = out
-
-	if len(opts.Files) > 0 {
-		c.sftp, err = sftp.NewClient(c.ssh)
-		if err != nil {
-			return fmt.Errorf("open sftp session: %w", err)
-		}
-		defer c.sftp.Close()
-
-		remoteDir := filepath.Join(opts.UploadPath, id)
-
-		if err := Upload(c.sftp, remoteDir, opts.Files...); err != nil {
-			return fmt.Errorf("upload: %w", err)
+			jobCh <- jobs[res.host]
 		}
 
-		slog.Debug("MakeExec", "files", opts.Files, "cmd", cmd, "remoteDir", remoteDir)
-		if cmd == "" {
-			cmd = "./" + filepath.Join(remoteDir, filepath.Base(opts.Files[0]))
-			if err := MakeExec(c.sftp, cmd); err != nil {
-				return fmt.Errorf("make exec: %w", err)
-			}
+		if len(jobs) == 0 {
+			go func() {
+				close(jobCh)
+				wg.Wait()
+				close(resCh)
+			}()
 		}
 	}
-
-	errCh := make(chan error)
-	go func() { errCh <- session.Run(cmd) }()
-	select {
-	case err := <-errCh:
-		return err
-	case <-time.After(c.opts.ExecTimeout):
-		return os.ErrDeadlineExceeded
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-type clientErr struct {
-	client *ssh.Client
-	err    error
-}
-
-func dialContext(ctx context.Context, n, addr string, cfg *ssh.ClientConfig) (*ssh.Client, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	ch := make(chan clientErr)
-	go func() {
-		client, err := ssh.Dial(n, addr, cfg)
-		ch <- clientErr{client, err}
-	}()
-	select {
-	case res := <-ch:
-		return res.client, res.err
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
+	return nil
 }

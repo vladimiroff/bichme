@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
-
 	"bichme"
+
+	"github.com/spf13/cobra"
 )
 
 // shellCmd run a single command on multiple machines.

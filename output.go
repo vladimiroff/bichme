@@ -61,6 +61,7 @@ func (o *Output) Write(p []byte) (n int, err error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
+	n = len(p) // in order to avoid 'short write' error if file is nil
 	if o.file != nil {
 		n, err = o.file.Write(p)
 	}

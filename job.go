@@ -15,6 +15,12 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+var (
+	ErrConnection   = errors.New("connection failed")
+	ErrFileTransfer = errors.New("file transfer failed")
+	ErrExection     = errors.New("exection failed")
+)
+
 // Job represents a single task to be executed on a single host. A job holds
 // its information while going through retries until completion or exhaustion.
 type Job struct {
@@ -23,6 +29,7 @@ type Job struct {
 	tries  int
 	opts   *Opts
 	config *ssh.ClientConfig // TODO: saner name
+	err    error
 
 	// handles
 	ssh  *ssh.Client
@@ -31,12 +38,11 @@ type Job struct {
 
 	// what the job should do
 	tasks Tasks
-
-	// errors
-	connErr error
-	fileErr error
-	execErr error
 }
+
+// Err returns the error from last job exection (if any). As soon as a job is
+// started, the previous error is wiped and reset back to nil.
+func (j Job) Err() error { return j.err }
 
 // Close implements io.Closer.
 func (j *Job) Close() error {
@@ -63,9 +69,7 @@ func (j *Job) Start(ctx context.Context) error {
 
 	j.tries++
 	j.out = NewOutput(j.host)
-	j.connErr = nil
-	j.fileErr = nil
-	j.execErr = nil
+	j.err = nil
 
 	var err error
 	defer func() {
@@ -90,22 +94,24 @@ func (j *Job) Start(ctx context.Context) error {
 
 	if j.ssh == nil || !sshIsAlive(j.ssh) {
 		if err = j.Dial(ctx); err != nil {
-			return err
+			return fmt.Errorf("%w: %w", ErrConnection, err)
 		}
 	}
 	if j.tasks.Has(UploadTask) {
 		if j.sftp == nil || !sftpIsAlive(j.sftp) {
 			j.sftp, err = sftp.NewClient(j.ssh)
 			if err != nil {
-				return fmt.Errorf("open sftp session: %w", err)
+				return fmt.Errorf("%w: open sftp session: %w", ErrFileTransfer, err)
 			}
 		}
 		if err := j.Upload(ctx); err != nil {
-			return err
+			return fmt.Errorf("%w: %w", ErrFileTransfer, err)
 		}
 	}
 	if j.tasks.Has(ExecTask) {
-		err = j.Exec(ctx)
+		if err = j.Exec(ctx); err != nil {
+			err = fmt.Errorf("%w: %w", ErrExection, err)
+		}
 	}
 
 	return err

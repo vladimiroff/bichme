@@ -100,20 +100,23 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		jobCh <- jobs[server]
 	}
 
+	var once sync.Once
 	for res := range resCh {
-		slog.Debug("Exec", "host", res.host, "try", jobs[res.host].tries, "error", res.err)
+		ctxIsDone := ctx.Err() != nil
+
+		slog.Debug("Job done", "host", res.host, "try", jobs[res.host].tries, "error", res.err)
 		if jobs[res.host].tasks.Done() {
 			delete(jobs, res.host)
-		} else {
+		} else if !ctxIsDone {
 			jobCh <- jobs[res.host]
 		}
 
-		if len(jobs) == 0 {
-			go func() {
+		if len(jobs) == 0 || ctxIsDone {
+			go once.Do(func() {
 				close(jobCh)
 				wg.Wait()
 				close(resCh)
-			}()
+			})
 		}
 	}
 	return nil

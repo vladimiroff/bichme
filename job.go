@@ -29,7 +29,6 @@ type Job struct {
 	tries  int
 	opts   *Opts
 	config *ssh.ClientConfig // TODO: saner name
-	err    error
 
 	// handles
 	ssh  *ssh.Client
@@ -39,10 +38,6 @@ type Job struct {
 	// what the job should do
 	tasks Tasks
 }
-
-// Err returns the error from last job exection (if any). As soon as a job is
-// started, the previous error is wiped and reset back to nil.
-func (j Job) Err() error { return j.err }
 
 // Close implements io.Closer.
 func (j *Job) Close() error {
@@ -69,7 +64,6 @@ func (j *Job) Start(ctx context.Context) error {
 
 	j.tries++
 	j.out = NewOutput(j.host)
-	j.err = nil
 
 	var err error
 	defer func() {

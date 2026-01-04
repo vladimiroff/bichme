@@ -5,9 +5,11 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -71,6 +73,7 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	}
 
 	jobs := make(map[string]*Job, len(servers))
+	archive := make(map[*Job]error, len(servers))
 	for _, server := range servers {
 		cfg := &ssh.ClientConfig{
 			User:            opts.User,
@@ -86,7 +89,7 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			server = parts[1]
 		}
 
-		jobs[server] = &Job{
+		j := &Job{
 			host:   server,
 			cmd:    cmd,
 			opts:   &opts,
@@ -95,29 +98,51 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			// cleanup: true,
 		}
 		if len(opts.Files) > 0 {
-			jobs[server].tasks.Set(UploadTask)
+			j.tasks.Set(UploadTask)
 		}
-		jobCh <- jobs[server]
+		jobs[server] = j
+		archive[j] = nil
+		jobCh <- j
 	}
 
 	var once sync.Once
-	for res := range resCh {
-		ctxIsDone := ctx.Err() != nil
+	finish := func() {
+		close(jobCh)
+		wg.Wait()
+		close(resCh)
+	}
 
-		slog.Debug("Job done", "host", res.host, "try", jobs[res.host].tries, "error", res.err)
-		if jobs[res.host].tasks.Done() {
-			delete(jobs, res.host)
-		} else if !ctxIsDone {
-			jobCh <- jobs[res.host]
-		}
+	SIGUSR1 := make(chan os.Signal, 1)
+	signal.Notify(SIGUSR1, syscall.SIGUSR1)
 
-		if len(jobs) == 0 || ctxIsDone {
-			go once.Do(func() {
-				close(jobCh)
-				wg.Wait()
-				close(resCh)
-			})
+	for {
+		select {
+		case <-ctx.Done():
+			go once.Do(finish)
+		case <-SIGUSR1:
+			WriteStats(os.Stdout, archive)
+		case res, ok := <-resCh:
+			if !ok {
+				WriteStats(os.Stdout, archive)
+				return nil
+			}
+
+			closing := ctx.Err() != nil
+			job := jobs[res.host]
+
+			slog.Debug("Job done", "host", res.host, "try", job.tries, "error", res.err)
+			archive[job] = res.err
+			if job.tasks.Done() {
+				delete(jobs, res.host)
+			} else if !closing {
+				archive[job] = nil
+				jobCh <- job
+			}
+
+			if len(jobs) == 0 {
+				go once.Do(finish)
+			}
+
 		}
 	}
-	return nil
 }

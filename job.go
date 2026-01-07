@@ -64,7 +64,7 @@ func (j *Job) Start(ctx context.Context) error {
 	}
 
 	j.tries++
-	j.out = NewOutput(j.host)
+	j.out = NewOutput(strings.Split(j.host, ":")[0])
 
 	var err error
 	defer func() {

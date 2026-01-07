@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -42,13 +41,15 @@ type Job struct {
 // Close implements io.Closer.
 func (j *Job) Close() error {
 	var err error
-	// TODO: cleanup uploads
-	for _, j := range [...]io.Closer{j.sftp, j.ssh, j.out} {
-		if j != nil {
-			errors.Join(err, j.Close())
-		}
+	if j.sftp != nil {
+		errors.Join(err, j.sftp.Close())
 	}
-
+	if j.ssh != nil {
+		errors.Join(err, j.ssh.Close())
+	}
+	if j.ssh != nil {
+		errors.Join(err, j.out.Close())
+	}
 	return err
 }
 
@@ -129,6 +130,9 @@ func (j *Job) Upload(ctx context.Context) error {
 	return nil
 }
 
+// just to be able to override it in tests
+var sshDial = ssh.Dial
+
 // Dial connects to the remote host.
 func (j *Job) Dial(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
@@ -142,7 +146,7 @@ func (j *Job) Dial(ctx context.Context) error {
 
 	ch := make(chan error)
 	go func() {
-		client, err := ssh.Dial("tcp", addr, j.config)
+		client, err := sshDial("tcp", addr, j.config)
 		j.ssh = client
 		ch <- err
 	}()
@@ -173,10 +177,7 @@ func (j *Job) Exec(ctx context.Context) error {
 	select {
 	case <-time.After(j.opts.ExecTimeout):
 		return os.ErrDeadlineExceeded
-	case <-ctx.Done():
-		return ctx.Err()
 	case err = <-errCh:
+		return err
 	}
-
-	return err
 }

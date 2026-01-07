@@ -3,9 +3,11 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	osUser "os/user"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,8 +54,10 @@ func opts() bichme.Opts {
 	}
 }
 
-// readLines reads filename and returns non-empty lines.
-func readLines(filename string) ([]string, error) {
+// readHosts reads filename and returns all the hosts from inside, sorted with
+// removed duplicates. It ignores empty lines and treats # as comments. For
+// each host with a port suffix, the given (or default --port) value is used.
+func readHosts(filename string) ([]string, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
@@ -63,13 +67,19 @@ func readLines(filename string) ([]string, error) {
 	var lines []string
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if len(line) == 0 || line[0] == '#' {
+		line := strings.TrimSpace(strings.Split(scanner.Text(), "#")[0])
+		if len(line) == 0 {
 			continue
+		}
+
+		if !strings.Contains(line, ":") {
+			line += fmt.Sprintf(":%d", port)
 		}
 		lines = append(lines, line)
 	}
-	return lines, nil
+
+	slices.Sort(lines)
+	return slices.Compact(lines), nil
 }
 
 // rootCmd represents the base command when called without any subcommands

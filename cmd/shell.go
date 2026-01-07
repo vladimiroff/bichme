@@ -24,7 +24,7 @@ var shellCmd = &cobra.Command{
 		)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		hosts, err := readLines(args[0])
+		hosts, err := readHosts(args[0])
 		if err != nil {
 			return fmt.Errorf("read servers: %w", err)
 		}

@@ -155,7 +155,7 @@ func TestJobStart(t *testing.T) {
 		if err := j.Start(ctx); err != nil {
 			t.Error(err)
 		}
-		if _, err := os.Stat(filepath.Join(dir, "h.1.log")); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, "h_1.log")); err != nil {
 			t.Errorf("history file: %v", err)
 		}
 	})

@@ -40,6 +40,10 @@ type jobResult struct {
 	err  error
 }
 
+func writeMetaFile(path, name, content string) error {
+	return os.WriteFile(filepath.Join(path, name), []byte(content), 0644)
+}
+
 func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	var auths []ssh.AuthMethod
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
@@ -65,11 +69,18 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	}
 
 	if opts.History {
-		opts.HistoryPath = filepath.Join(opts.HistoryPath, id)
-		if err := os.MkdirAll(opts.HistoryPath, 0700); err != nil {
+		path := filepath.Join(opts.HistoryPath, id)
+		if err := os.MkdirAll(path, 0700); err != nil {
 			slog.Error("failed to initialize history", "error", err)
 			opts.History = false
 		}
+		if err := writeMetaFile(path, "cmd", cmd); err != nil {
+			slog.Error("failed to write cmd", "error", err)
+		}
+		if err := writeMetaFile(path, "servers", strings.Join(servers, "\n")); err != nil {
+			slog.Error("failed to write cmd", "error", err)
+		}
+		opts.HistoryPath = path
 	}
 
 	jobs := make(map[string]*Job, len(servers))
@@ -100,6 +111,10 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		if len(opts.Files) > 0 {
 			j.tasks.Set(UploadTask)
 		}
+		if opts.History {
+			j.tasks.Set(KeepHistoryTask)
+		}
+
 		jobs[server] = j
 		archive[j] = nil
 		jobCh <- j

@@ -38,6 +38,8 @@ type Job struct {
 	tasks Tasks
 }
 
+func (j Job) hostname() string { return strings.SplitN(j.host, ":", 2)[0] }
+
 // Close implements io.Closer.
 func (j *Job) Close() error {
 	var err error
@@ -64,7 +66,7 @@ func (j *Job) Start(ctx context.Context) error {
 	}
 
 	j.tries++
-	j.out = NewOutput(strings.Split(j.host, ":")[0])
+	j.out = NewOutput(j.hostname())
 
 	var err error
 	defer func() {
@@ -78,7 +80,7 @@ func (j *Job) Start(ctx context.Context) error {
 	}()
 
 	if j.tasks.Has(KeepHistoryTask) {
-		filename := filepath.Join(j.opts.HistoryPath, fmt.Sprintf("%s.%d.log", j.host, j.tries))
+		filename := filepath.Join(j.opts.HistoryPath, fmt.Sprintf("%s_%d.log", j.hostname(), j.tries))
 		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 		if err != nil {
 			slog.Error("Failed to open output file", "host", j.host, "error", err)

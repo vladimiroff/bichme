@@ -3,25 +3,58 @@ package bichme
 import (
 	"bytes"
 	"cmp"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 )
 
 type HistoryItem struct {
-	Time    time.Time
-	Servers []string
-	Command string
+	Time     time.Time
+	Duration time.Duration
+	Hosts    []string
+	Files    []string
+	Logs     []string
+	Command  string
+}
+
+// Read implements io.Reader.
+func (hi HistoryItem) Read(p []byte) (n int, err error) {
+	var buf bytes.Buffer
+	if _, err = hi.WriteTo(&buf); err != nil {
+		return 0, err
+	}
+
+	n = copy(p, buf.Bytes())
+	if n < buf.Len() {
+		return n, io.ErrShortBuffer
+	}
+
+	return n, io.EOF
+}
+
+// WriteTo implements io.WriterTo.
+func (hi HistoryItem) WriteTo(w io.Writer) (n int64, err error) {
+	t, terr := fmt.Fprintf(w, "Start Time:\t%s\n", hi.Time)
+	d, derr := fmt.Fprintf(w, "Duration:\t%s\n", hi.Duration)
+	c, cerr := fmt.Fprintf(w, "Command:\t%s\n", hi.Command)
+	f, ferr := fmt.Fprintf(w, "Files:\t\t%s\n\n", strings.Join(hi.Files, "\n\t\t"))
+	h, herr := fmt.Fprintf(w, "Hosts:\t\t%s\n\n", strings.Join(hi.Hosts, "\n\t\t"))
+	l, lerr := fmt.Fprintf(w, "Logs:\t\t%s\n\n", strings.Join(hi.Logs, "\n\t\t"))
+	return int64(t + d + f + c + h + l), errors.Join(err, terr, derr, cerr, ferr, herr, lerr)
 }
 
 var slash = string(os.PathSeparator)
 
-func ListHistory(fsys fs.FS) ([]HistoryItem, error) {
+func ListHistory(root string) ([]HistoryItem, error) {
+	fsys := os.DirFS(root)
 	items := make(map[string]HistoryItem)
 	fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -52,22 +85,50 @@ func ListHistory(fsys fs.FS) ([]HistoryItem, error) {
 				panic(path)
 			}
 			switch d.Name() {
-			case "servers":
-				c, err := fs.ReadFile(fsys, path)
+			case "command":
+				f, err := fs.ReadFile(fsys, path)
 				if err != nil {
-					slog.Error("Failed to read servers", "path", path, "error", err)
+					slog.Error("Failed to read command", "path", path, "error", err)
+					return nil
 				}
-				servers := bytes.Split(c, newline)
-				entry.Servers = make([]string, len(servers))
-				for i, server := range servers {
-					entry.Servers[i] = strings.SplitN(string(server), ":", 2)[0]
-				}
-			case "cmd":
-				c, err := fs.ReadFile(fsys, path)
+				entry.Command = string(f)
+			case "files":
+				f, err := fs.ReadFile(fsys, path)
 				if err != nil {
-					slog.Error("Failed to read servers", "path", path, "error", err)
+					slog.Error("Failed to read files", "path", path, "error", err)
+					return nil
 				}
-				entry.Command = string(c)
+				files := bytes.Split(f, newline)
+				entry.Files = make([]string, len(files))
+				for i, file := range files {
+					entry.Files[i] = string(file)
+				}
+			case "hosts":
+				f, err := fs.ReadFile(fsys, path)
+				if err != nil {
+					slog.Error("Failed to read hosts", "path", path, "error", err)
+					return nil
+				}
+				hosts := bytes.Split(f, newline)
+				entry.Hosts = make([]string, len(hosts))
+				for i, host := range hosts {
+					entry.Hosts[i] = strings.SplitN(string(host), ":", 2)[0]
+				}
+			case "duration":
+				f, err := fs.ReadFile(fsys, path)
+				if err != nil {
+					slog.Error("Failed to read duration", "path", path, "error", err)
+					return nil
+				}
+				d, err := time.ParseDuration(string(f))
+				if err != nil {
+					slog.Error("Failed to parse duration", "path", path, "content", string(f), "error", err)
+				}
+				entry.Duration = d.Round(time.Second)
+			default:
+				if strings.HasSuffix(d.Name(), ".log") {
+					entry.Logs = append(entry.Logs, filepath.Join(root, path))
+				}
 			}
 			items[entryName(path)] = entry
 

@@ -74,12 +74,20 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			slog.Error("failed to initialize history", "error", err)
 			opts.History = false
 		}
-		if err := writeMetaFile(path, "cmd", cmd); err != nil {
-			slog.Error("failed to write cmd", "error", err)
+		if err := writeMetaFile(path, "command", cmd); err != nil {
+			slog.Error("failed to write command", "error", err)
 		}
-		if err := writeMetaFile(path, "servers", strings.Join(servers, "\n")); err != nil {
-			slog.Error("failed to write cmd", "error", err)
+		if err := writeMetaFile(path, "hosts", strings.Join(servers, "\n")); err != nil {
+			slog.Error("failed to write hosts", "error", err)
 		}
+		if err := writeMetaFile(path, "files", strings.Join(opts.Files, "\n")); err != nil {
+			slog.Error("failed to write files", "error", err)
+		}
+		defer func(start time.Time) {
+			if err := writeMetaFile(path, "duration", time.Since(start).String()); err != nil {
+				slog.Error("failed to write files", "error", err)
+			}
+		}(time.Now())
 		opts.HistoryPath = path
 	}
 

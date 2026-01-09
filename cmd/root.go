@@ -104,6 +104,11 @@ func Execute(ctx context.Context) {
 	}
 }
 
+func die(format string, v ...any) {
+	fmt.Fprintf(os.Stdout, format+"\n", v...)
+	os.Exit(1)
+}
+
 // defaultUser to login as if -u|--user is not passed.
 //
 // TODO: should probably figure out a way to allow overriding that via

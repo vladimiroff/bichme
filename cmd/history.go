@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strconv"
 	"text/tabwriter"
@@ -16,7 +18,7 @@ import (
 // historyCmd lists previous executions
 var historyCmd = &cobra.Command{
 	Use:   "history",
-	Short: "List executions and their result",
+	Short: "List previous executions and their result",
 	Run: func(cmd *cobra.Command, args []string) {
 		items, err := bichme.ListHistory(historyPath)
 		if err != nil {
@@ -66,7 +68,53 @@ var historyInspectCmd = &cobra.Command{
 	},
 }
 
+var (
+	purgeOlderThan time.Duration
+	purgeKeep      int
+	purgeAll       bool
+
+	errBadPurgeVars = errors.New("either --(keep|older-than) or --all should be passed")
+)
+
+// historyPurgeCmd purges previous executions.
+var historyPurgeCmd = &cobra.Command{
+	Use:   "purge",
+	Short: "Purge previous executions",
+	PreRunE: func(_ *cobra.Command, args []string) error {
+		if purgeOlderThan == 0 && purgeKeep == 0 && !purgeAll {
+			return errBadPurgeVars
+		}
+
+		if purgeAll && (purgeOlderThan > 0 || purgeKeep > 0) {
+			return errBadPurgeVars
+		}
+		return nil
+	},
+	Run: func(cmd *cobra.Command, _ []string) {
+		items, err := bichme.ListHistory(historyPath)
+		if err != nil {
+			die("ERROR: %v\n", err)
+		}
+
+		now := time.Now().UTC()
+		for i, item := range items {
+			if purgeAll ||
+				(purgeKeep > 0 && purgeKeep <= i) ||
+				(purgeOlderThan > 0 && now.Sub(item.Time) > purgeOlderThan) {
+
+				slog.Info("Deleting", "id", i+1, "from", item.Time, "error", err)
+				err = errors.Join(err, item.Delete())
+			}
+		}
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(historyCmd)
 	historyCmd.AddCommand(historyInspectCmd)
+	historyCmd.AddCommand(historyPurgeCmd)
+
+	historyPurgeCmd.Flags().IntVar(&purgeKeep, "keep", 0, "how many of the latest executions to keep")
+	historyPurgeCmd.Flags().DurationVar(&purgeOlderThan, "older-than", 0, "older than how much time to purge")
+	historyPurgeCmd.Flags().BoolVarP(&purgeAll, "all", "a", false, "whether to just delete all previous executions")
 }

@@ -17,6 +17,7 @@ import (
 )
 
 type HistoryItem struct {
+	Path     string
 	Time     time.Time
 	Duration time.Duration
 	Hosts    []string
@@ -51,6 +52,9 @@ func (hi HistoryItem) WriteTo(w io.Writer) (n int64, err error) {
 	return int64(t + d + f + c + h + l), errors.Join(err, terr, derr, cerr, ferr, herr, lerr)
 }
 
+// Delete the underlying state directory.
+func (hi HistoryItem) Delete() error { return os.RemoveAll(hi.Path) }
+
 var slash = string(os.PathSeparator)
 
 func ListHistory(root string) ([]HistoryItem, error) {
@@ -75,7 +79,7 @@ func ListHistory(root string) ([]HistoryItem, error) {
 				slog.Error("Bad history entry", "name", path, "error", err)
 				return fs.SkipDir
 			}
-			items[path] = HistoryItem{Time: t}
+			items[path] = HistoryItem{Path: filepath.Join(root, path), Time: t}
 		case 2:
 			if d.IsDir() {
 				return nil
@@ -85,6 +89,17 @@ func ListHistory(root string) ([]HistoryItem, error) {
 				panic(path)
 			}
 			switch d.Name() {
+			case "start":
+				f, err := fs.ReadFile(fsys, path)
+				if err != nil {
+					slog.Error("Failed to read start", "path", path, "error", err)
+					return nil
+				}
+				t, err := time.Parse(time.RFC3339, string(f))
+				if err != nil {
+					slog.Error("Failed to parse start", "path", path, "content", string(f), "error", err)
+				}
+				entry.Time = t
 			case "command":
 				f, err := fs.ReadFile(fsys, path)
 				if err != nil {

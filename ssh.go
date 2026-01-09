@@ -45,6 +45,7 @@ func writeMetaFile(path, name, content string) error {
 }
 
 func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
+	start := time.Now()
 	var auths []ssh.AuthMethod
 	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 		c, err := net.Dial("unix", sock)
@@ -83,11 +84,14 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		if err := writeMetaFile(path, "files", strings.Join(opts.Files, "\n")); err != nil {
 			slog.Error("failed to write files", "error", err)
 		}
+		if err := writeMetaFile(path, "start", start.Format(time.RFC3339)); err != nil {
+			slog.Error("failed to write files", "error", err)
+		}
 		defer func(start time.Time) {
 			if err := writeMetaFile(path, "duration", time.Since(start).String()); err != nil {
 				slog.Error("failed to write files", "error", err)
 			}
-		}(time.Now())
+		}(start)
 		opts.HistoryPath = path
 	}
 

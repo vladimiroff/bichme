@@ -104,6 +104,7 @@ func (j *Job) Start(ctx context.Context) error {
 		if err := j.Upload(ctx); err != nil {
 			return fmt.Errorf("%w: %w", ErrFileTransfer, err)
 		}
+		j.tasks.Unset(UploadTask)
 	}
 	if j.tasks.Has(ExecTask) {
 		if err = j.Exec(ctx); err != nil {
@@ -129,6 +130,7 @@ func (j *Job) Upload(ctx context.Context) error {
 			return fmt.Errorf("make exec: %w", err)
 		}
 	}
+
 	return nil
 }
 

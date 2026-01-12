@@ -3,7 +3,6 @@ package bichme
 import (
 	"context"
 	"log/slog"
-	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
 )
 
 var id = runID()
@@ -46,14 +44,7 @@ func writeMetaFile(path, name, content string) error {
 
 func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	start := time.Now()
-	var auths []ssh.AuthMethod
-	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-		c, err := net.Dial("unix", sock)
-		if err == nil {
-			ag := agent.NewClient(c)
-			auths = append(auths, ssh.PublicKeysCallback(ag.Signers))
-		}
-	}
+	auths := loadSSHAuth()
 
 	jobCh := make(chan *Job)
 	resCh := make(chan jobResult)

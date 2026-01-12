@@ -22,7 +22,7 @@ var (
 	uploadPath  string // defines where are files uploaded.
 
 	defaultHistoryPath = os.ExpandEnv("$HOME/.local/state/bichme/history/")
-	defaultUploadPath  = ".cache/bichme/"
+	defaultUploadPath  = ""
 )
 
 // Arguments that are used by both shell and exec

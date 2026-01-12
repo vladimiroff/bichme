@@ -39,7 +39,10 @@ var execCmd = &cobra.Command{
 		}
 		files = append([]string{args[1]}, files...)
 
-		command := path.Join(uploadPath, info.Name())
+		command := "./" + info.Name()
+		if uploadPath != "" {
+			command = path.Join(uploadPath, info.Name())
+		}
 		return bichme.Run(cmd.Context(), hosts, command, opts())
 	},
 }

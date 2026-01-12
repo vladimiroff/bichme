@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"time"
 
 	"bichme"
@@ -37,9 +38,9 @@ var execCmd = &cobra.Command{
 			return fmt.Errorf("can not execute directory")
 		}
 		files = append([]string{args[1]}, files...)
-		// TODO: duplicated hosts would probably go berserk
 
-		return bichme.Run(cmd.Context(), hosts, "", opts())
+		command := path.Join(uploadPath, info.Name())
+		return bichme.Run(cmd.Context(), hosts, command, opts())
 	},
 }
 

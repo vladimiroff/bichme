@@ -118,15 +118,14 @@ func (j *Job) Start(ctx context.Context) error {
 // Upload files from Job's opts.Files and make sure the first one will be
 // executed if no command is given.
 func (j *Job) Upload(ctx context.Context) error {
-	remoteDir := filepath.Join(j.opts.UploadPath, id)
+	remoteDir := j.opts.UploadPath
 	if err := upload(ctx, j.sftp, remoteDir, j.opts.Files...); err != nil {
 		return fmt.Errorf("upload: %w", err)
 	}
 
-	slog.Debug("MakeExec", "files", j.opts.Files, "cmd", j.cmd, "remoteDir", remoteDir)
-	if j.cmd == "" {
-		j.cmd = "./" + filepath.Join(remoteDir, filepath.Base(j.opts.Files[0]))
-		if err := MakeExec(ctx, j.sftp, j.cmd); err != nil {
+	if len(j.opts.Files) > 0 {
+		filename := filepath.Join(remoteDir, filepath.Base(j.opts.Files[0]))
+		if err := makeExec(ctx, j.sftp, filename); err != nil {
 			return fmt.Errorf("make exec: %w", err)
 		}
 	}

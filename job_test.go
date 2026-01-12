@@ -294,16 +294,9 @@ func TestJobExec(t *testing.T) {
 	})
 }
 
-const testFileContent = "#!/bin/sh\necho ok"
-
 func TestJobUpload(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
-		localDir := t.TempDir()
-		localFile := filepath.Join(localDir, "script.sh")
-		if err := os.WriteFile(localFile, []byte(testFileContent), 0644); err != nil {
-			t.Fatal(err)
-		}
-
+		localFile := writeTestFile(t, "script.sh", testFileContent)
 		remoteRoot := t.TempDir()
 		handler := compositeHandler(
 			sftpSubsystemHandler(remoteRoot),
@@ -333,34 +326,28 @@ func TestJobUpload(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		uploaded := filepath.Join(remoteRoot, "uploads", id, "script.sh")
+		uploaded := filepath.Join(remoteRoot, "uploads", "script.sh")
 		content, err := os.ReadFile(uploaded)
 		if err != nil {
-			t.Fatalf("uploaded file not found: %v", err)
+			t.Errorf("uploaded file not found: %v", err)
 		}
 		if string(content) != testFileContent {
 			t.Errorf("content mismatch: got %q", content)
 		}
 
-		want := "./" + filepath.Join("uploads", id, "script.sh")
-		if j.cmd != want {
-			t.Errorf("cmd = %q, want %q", j.cmd, want)
+		if j.cmd != "" {
+			t.Errorf("cmd = %q, want %q", j.cmd, "")
 		}
 	})
 
 	t.Run("with_cmd", func(t *testing.T) {
-		localDir := t.TempDir()
-		localFile := filepath.Join(localDir, "data.txt")
-		if err := os.WriteFile(localFile, []byte("data"), 0644); err != nil {
-			t.Fatal(err)
-		}
-
+		localFile := writeTestFile(t, "script.sh", testFileContent)
 		remoteRoot := t.TempDir()
 		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
 
 		j := &Job{
 			host:  "h",
-			cmd:   "cat uploads/" + id + "/data.txt", // pre-set command
+			cmd:   "cat uploads/data.txt", // pre-set command
 			tasks: UploadTask,
 			opts:  &Opts{Port: 22, Files: []string{localFile}, UploadPath: "uploads"},
 			out:   NewOutput("h"),
@@ -382,7 +369,7 @@ func TestJobUpload(t *testing.T) {
 		}
 
 		// cmd should remain unchanged when pre-set
-		if j.cmd != "cat uploads/"+id+"/data.txt" {
+		if j.cmd != "cat uploads/data.txt" {
 			t.Errorf("cmd was modified: %q", j.cmd)
 		}
 	})
@@ -390,15 +377,9 @@ func TestJobUpload(t *testing.T) {
 	t.Run("multiple_files", func(t *testing.T) {
 		localDir := t.TempDir()
 		files := []string{
-			filepath.Join(localDir, "a.sh"),
-			filepath.Join(localDir, "b.txt"),
+			writeTestFile(t, localDir+"/a.sh", "content:a.sh"),
+			writeTestFile(t, localDir+"/b.txt", "content:b.txt"),
 		}
-		for _, f := range files {
-			if err := os.WriteFile(f, []byte("content:"+filepath.Base(f)), 0644); err != nil {
-				t.Fatal(err)
-			}
-		}
-
 		remoteRoot := t.TempDir()
 		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
 
@@ -425,7 +406,7 @@ func TestJobUpload(t *testing.T) {
 		}
 
 		for _, f := range files {
-			uploaded := filepath.Join(remoteRoot, "up", id, filepath.Base(f))
+			uploaded := filepath.Join(remoteRoot, "up", filepath.Base(f))
 			content, err := os.ReadFile(uploaded)
 			if err != nil {
 				t.Errorf("file %s not uploaded: %v", filepath.Base(f), err)
@@ -435,12 +416,6 @@ func TestJobUpload(t *testing.T) {
 			if string(content) != want {
 				t.Errorf("file %s content = %q, want %q", filepath.Base(f), content, want)
 			}
-		}
-
-		// cmd should be set to first file
-		want := "./" + filepath.Join("up", id, "a.sh")
-		if j.cmd != want {
-			t.Errorf("cmd = %q, want %q", j.cmd, want)
 		}
 	})
 
@@ -489,12 +464,7 @@ func TestJobUpload(t *testing.T) {
 	})
 
 	t.Run("remote_mkdir_fail", func(t *testing.T) {
-		localDir := t.TempDir()
-		localFile := filepath.Join(localDir, "script.sh")
-		if err := os.WriteFile(localFile, []byte(testFileContent), 0644); err != nil {
-			t.Fatal(err)
-		}
-
+		localFile := writeTestFile(t, "scirpt.sh", testFileContent)
 		remoteRoot := t.TempDir()
 		if err := os.Chmod(remoteRoot, 0555); err != nil { // forbid mkdir
 			t.Fatal(err)
@@ -531,12 +501,7 @@ func TestJobUpload(t *testing.T) {
 func TestJobStartWithUpload(t *testing.T) {
 	discardStdout(t)
 	t.Run("ok", func(t *testing.T) {
-		localDir := t.TempDir()
-		localFile := filepath.Join(localDir, "run.sh")
-		if err := os.WriteFile(localFile, []byte(testFileContent), 0644); err != nil {
-			t.Fatal(err)
-		}
-
+		localFile := writeTestFile(t, "run.sh", testFileContent)
 		remoteRoot := t.TempDir()
 		handler := compositeHandler(
 			sftpSubsystemHandler(remoteRoot),
@@ -559,19 +524,14 @@ func TestJobStartWithUpload(t *testing.T) {
 			t.Error("tasks not done")
 		}
 
-		uploaded := filepath.Join(remoteRoot, "work", id, "run.sh")
+		uploaded := filepath.Join(remoteRoot, "work", "run.sh")
 		if _, err := os.Stat(uploaded); err != nil {
 			t.Errorf("file not uploaded: %v", err)
 		}
 	})
 
 	t.Run("sftp_client_error", func(t *testing.T) {
-		localDir := t.TempDir()
-		localFile := filepath.Join(localDir, "run.sh")
-		if err := os.WriteFile(localFile, []byte(testFileContent), 0644); err != nil {
-			t.Fatal(err)
-		}
-
+		localFile := writeTestFile(t, "scirpt.sh", testFileContent)
 		handler := compositeHandler(
 			rejectSFTPHandler(),
 			execRequestHandler("", 0),
@@ -592,12 +552,7 @@ func TestJobStartWithUpload(t *testing.T) {
 	})
 
 	t.Run("upload_error", func(t *testing.T) {
-		localDir := t.TempDir()
-		localFile := filepath.Join(localDir, "run.sh")
-		if err := os.WriteFile(localFile, []byte(testFileContent), 0644); err != nil {
-			t.Fatal(err)
-		}
-
+		localFile := writeTestFile(t, "scirpt.sh", testFileContent)
 		remoteRoot := t.TempDir()
 		if err := os.Chmod(remoteRoot, 0555); err != nil {
 			t.Fatal(err)

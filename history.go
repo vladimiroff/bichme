@@ -55,8 +55,6 @@ func (hi HistoryItem) WriteTo(w io.Writer) (n int64, err error) {
 // Delete the underlying state directory.
 func (hi HistoryItem) Delete() error { return os.RemoveAll(hi.Path) }
 
-var slash = string(os.PathSeparator)
-
 func ListHistory(root string) ([]HistoryItem, error) {
 	fsys := os.DirFS(root)
 	items := make(map[string]HistoryItem)
@@ -66,7 +64,7 @@ func ListHistory(root string) ([]HistoryItem, error) {
 			return err
 		}
 
-		switch strings.Count(path, slash) {
+		switch strings.Count(path, "/") {
 		case 0:
 			return nil
 		case 1:
@@ -161,11 +159,12 @@ func ListHistory(root string) ([]HistoryItem, error) {
 }
 
 func entryTime(path string) (time.Time, error) {
-	parts := strings.SplitN(path, slash, 2)
-	return time.Parse(time.RFC3339, fmt.Sprintf("%sT%sZ", parts[0], parts[1]))
+	parts := strings.SplitN(path, "/", 2)
+	timePart := strings.SplitN(parts[1], ".", 2)[0] // strip pid
+	return time.Parse("2006-01-02/15-04-05", parts[0]+"/"+timePart)
 }
 
 func entryName(path string) string {
-	parts := strings.SplitN(path, slash, 3)
+	parts := strings.SplitN(path, "/", 3)
 	return fmt.Sprintf("%s/%s", parts[0], parts[1])
 }

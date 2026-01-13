@@ -85,7 +85,7 @@ func TestHistoryItemRead(t *testing.T) {
 
 func TestHistoryItemDelete(t *testing.T) {
 	t.Run("exists", func(t *testing.T) {
-		path := makeHistoryEntry(t, t.TempDir(), "2025-01-15", "10:30:00")
+		path := makeHistoryEntry(t, t.TempDir(), "2025-01-15", "10-30-00")
 		if err := (HistoryItem{Path: path}).Delete(); err != nil {
 			t.Fatalf("Delete: %v", err)
 		}
@@ -117,7 +117,7 @@ func TestListHistory(t *testing.T) {
 
 	t.Run("full_entry", func(t *testing.T) {
 		dir := t.TempDir()
-		entry := makeHistoryEntry(t, dir, "2025-01-15", "10:30:00")
+		entry := makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
 		writeTestFile(t, filepath.Join(entry, "start"), "2025-01-15T10:30:00Z")
 		writeTestFile(t, filepath.Join(entry, "command"), "uptime")
 		writeTestFile(t, filepath.Join(entry, "duration"), "5m0s")
@@ -154,14 +154,14 @@ func TestListHistory(t *testing.T) {
 
 	t.Run("sort_desc", func(t *testing.T) {
 		dir := t.TempDir()
-		entries := []struct{ date, tm, cmd string }{
-			{"2025-01-10", "08:00:00", "first"},
-			{"2025-01-15", "10:30:00", "third"},
-			{"2025-01-12", "12:00:00", "second"},
+		entries := []struct{ date, tm, start, cmd string }{
+			{"2025-01-10", "08-00-00", "2025-01-10T08:00:00Z", "first"},
+			{"2025-01-15", "10-30-00", "2025-01-15T10:30:00Z", "third"},
+			{"2025-01-12", "12-00-00", "2025-01-12T12:00:00Z", "second"},
 		}
 		for _, e := range entries {
 			entry := makeHistoryEntry(t, dir, e.date, e.tm)
-			writeTestFile(t, filepath.Join(entry, "start"), e.date+"T"+e.tm+"Z")
+			writeTestFile(t, filepath.Join(entry, "start"), e.start)
 			writeTestFile(t, filepath.Join(entry, "command"), e.cmd)
 		}
 
@@ -176,7 +176,7 @@ func TestListHistory(t *testing.T) {
 
 	t.Run("invalid", func(t *testing.T) {
 		dir := t.TempDir()
-		makeHistoryEntry(t, dir, "2025-01-15", "10:30:00")
+		makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
 		makeHistoryEntry(t, dir, "invalid-date", "time")
 
 		items, _ := ListHistory(dir)
@@ -187,7 +187,7 @@ func TestListHistory(t *testing.T) {
 
 	t.Run("nested_file", func(t *testing.T) {
 		dir := t.TempDir()
-		makeHistoryEntry(t, dir, "2025-01-15", "10:30:00")
+		makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
 		writeTestFile(t, filepath.Join(dir, "2025-01-15", "random.txt"), "ignored")
 
 		items, _ := ListHistory(dir)
@@ -198,7 +198,7 @@ func TestListHistory(t *testing.T) {
 
 	t.Run("nested_dir", func(t *testing.T) {
 		dir := t.TempDir()
-		entry := makeHistoryEntry(t, dir, "2025-01-15", "10:30:00")
+		entry := makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
 		os.MkdirAll(filepath.Join(entry, "nested"), 0755)
 
 		items, _ := ListHistory(dir)
@@ -209,7 +209,7 @@ func TestListHistory(t *testing.T) {
 
 	t.Run("deep_nesting_skipped", func(t *testing.T) {
 		dir := t.TempDir()
-		entry := makeHistoryEntry(t, dir, "2025-01-15", "10:30:00")
+		entry := makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
 		deep := filepath.Join(entry, "deep", "nested")
 		os.MkdirAll(deep, 0755)
 		writeTestFile(t, filepath.Join(deep, "ignored.log"), "data")
@@ -224,7 +224,7 @@ func TestListHistory(t *testing.T) {
 
 	t.Run("random_file", func(t *testing.T) {
 		dir := t.TempDir()
-		entry := makeHistoryEntry(t, dir, "2025-01-15", "10:30:00")
+		entry := makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
 		writeTestFile(t, filepath.Join(entry, "random.txt"), "ignored")
 
 		items, _ := ListHistory(dir)
@@ -235,7 +235,7 @@ func TestListHistory(t *testing.T) {
 
 	t.Run("invalid_start", func(t *testing.T) {
 		dir := t.TempDir()
-		entry := makeHistoryEntry(t, dir, "2025-01-15", "10:30:00")
+		entry := makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
 		writeTestFile(t, filepath.Join(entry, "start"), "invalid")
 
 		items, _ := ListHistory(dir)
@@ -246,7 +246,7 @@ func TestListHistory(t *testing.T) {
 
 	t.Run("invalid_duration", func(t *testing.T) {
 		dir := t.TempDir()
-		entry := makeHistoryEntry(t, dir, "2025-01-15", "10:30:00")
+		entry := makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
 		writeTestFile(t, filepath.Join(entry, "duration"), "invalid")
 
 		items, _ := ListHistory(dir)
@@ -257,7 +257,7 @@ func TestListHistory(t *testing.T) {
 
 	t.Run("duration_rounding", func(t *testing.T) {
 		dir := t.TempDir()
-		entry := makeHistoryEntry(t, dir, "2025-01-15", "10:30:00")
+		entry := makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
 		writeTestFile(t, filepath.Join(entry, "duration"), "5m30s500ms")
 
 		items, _ := ListHistory(dir)
@@ -270,7 +270,7 @@ func TestListHistory(t *testing.T) {
 	for _, f := range []string{"start", "command", "files", "hosts", "duration"} {
 		t.Run("unreadable_"+f, func(t *testing.T) {
 			dir := t.TempDir()
-			entry := makeHistoryEntry(t, dir, "2025-01-15", "10:30:00")
+			entry := makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
 			fpath := filepath.Join(entry, f)
 			writeTestFile(t, fpath, "content")
 			os.Chmod(fpath, 0000)
@@ -293,8 +293,9 @@ func TestEntryTime(t *testing.T) {
 		want time.Time
 		err  bool
 	}{
-		{"2025-01-15/10:30:00", time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC), false},
-		{"not-a-date/10:30:00", time.Time{}, true},
+		{"2025-01-15/10-30-00", time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC), false},
+		{"2025-01-15/10-30-00.12345", time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC), false},
+		{"not-a-date/10-30-00", time.Time{}, true},
 		{"2025-01-15/not-a-time", time.Time{}, true},
 	}
 
@@ -313,8 +314,8 @@ func TestEntryTime(t *testing.T) {
 
 func TestEntryName(t *testing.T) {
 	tt := []struct{ path, want string }{
-		{"2025-01-15/10:30:00/command", "2025-01-15/10:30:00"},
-		{"2025-01-15/10:30:00/host.log", "2025-01-15/10:30:00"},
+		{"2025-01-15/10-30-00/command", "2025-01-15/10-30-00"},
+		{"2025-01-15/10-30-00.12345/host.log", "2025-01-15/10-30-00.12345"},
 		{"date/time/file", "date/time"},
 	}
 

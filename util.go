@@ -13,7 +13,7 @@ func runID() string {
 	t := time.Now()
 	return fmt.Sprintf("%s/%s.%d",
 		t.Format(time.DateOnly),
-		t.Format(time.TimeOnly), os.Getpid(),
+		t.Format("15-04-05"), os.Getpid(),
 	)
 }
 

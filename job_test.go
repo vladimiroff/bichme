@@ -20,14 +20,14 @@ func TestJobClose(t *testing.T) {
 	}{
 		{"zero", func() *Job { return &Job{} }},
 		{"connected", func() *Job {
-			j := &Job{host: "h", opts: newTestOpts(), out: NewOutput("h")}
+			j := &Job{host: "h", port: 22, execTimeout: time.Second, out: NewOutput("h")}
 			if err := j.Dial(ctx); err != nil {
 				t.Fatal(err)
 			}
 			return j
 		}},
 		{"disconnected", func() *Job {
-			j := &Job{host: "h", opts: newTestOpts(), out: NewOutput("h")}
+			j := &Job{host: "h", port: 22, execTimeout: time.Second, out: NewOutput("h")}
 			if err := j.Dial(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -60,7 +60,7 @@ func TestJobStart(t *testing.T) {
 
 	t.Run("exec", func(t *testing.T) {
 		sshDialHandlerMock(t, hardcodedOutputHandler("ok", 0))
-		j := &Job{host: "h", cmd: "true", tasks: ExecTask, opts: newTestOpts()}
+		j := &Job{host: "h", cmd: "true", tasks: ExecTask, port: 22, execTimeout: time.Second}
 		defer j.Close()
 
 		if err := j.Start(ctx); err != nil {
@@ -78,9 +78,11 @@ func TestJobStart(t *testing.T) {
 		dir := t.TempDir()
 		sshDialHandlerMock(t, hardcodedOutputHandler("", 0))
 		j := &Job{
-			host:  "h",
-			tasks: ExecTask | KeepHistoryTask,
-			opts:  &Opts{Port: 22, ExecTimeout: time.Second, HistoryPath: dir},
+			host:        "h",
+			tasks:       ExecTask | KeepHistoryTask,
+			port:        22,
+			execTimeout: time.Second,
+			historyPath: dir,
 		}
 		defer j.Close()
 
@@ -101,9 +103,12 @@ func TestJobStart(t *testing.T) {
 		))
 
 		j := &Job{
-			host:  "h",
-			tasks: UploadTask | ExecTask,
-			opts:  &Opts{Port: 22, ExecTimeout: time.Second, Files: []string{localFile}, UploadPath: "work"},
+			host:        "h",
+			tasks:       UploadTask | ExecTask,
+			port:        22,
+			execTimeout: time.Second,
+			files:       []string{localFile},
+			uploadPath:  "work",
 		}
 		defer j.Close()
 
@@ -127,7 +132,7 @@ func TestJobStart(t *testing.T) {
 		{
 			name:  "cancelled",
 			ctx:   cancelledCtx(),
-			setup: func(t *testing.T) *Job { return &Job{tasks: ExecTask, opts: newTestOpts()} },
+			setup: func(t *testing.T) *Job { return &Job{tasks: ExecTask, port: 22, execTimeout: time.Second} },
 			err:   context.Canceled,
 		},
 		{
@@ -136,7 +141,7 @@ func TestJobStart(t *testing.T) {
 				sshDialMock(t, func(_, _ string, _ *ssh.ClientConfig) (*ssh.Client, error) {
 					return nil, errors.New("refused")
 				})
-				return &Job{host: "h", tasks: ExecTask, opts: newTestOpts()}
+				return &Job{host: "h", tasks: ExecTask, port: 22, execTimeout: time.Second}
 			},
 			err: ErrConnection,
 		},
@@ -144,7 +149,7 @@ func TestJobStart(t *testing.T) {
 			name: "exec_fail",
 			setup: func(t *testing.T) *Job {
 				sshDialHandlerMock(t, hardcodedOutputHandler("", 1))
-				return &Job{host: "h", tasks: ExecTask, opts: &Opts{Port: 22, ExecTimeout: time.Second, Retries: 1}}
+				return &Job{host: "h", tasks: ExecTask, port: 22, execTimeout: time.Second, maxRetries: 1}
 			},
 			err: ErrExection,
 		},
@@ -152,7 +157,7 @@ func TestJobStart(t *testing.T) {
 			name: "timeout",
 			setup: func(t *testing.T) *Job {
 				sshDialHandlerMock(t, sleepHardcodedOutputHandler(100*time.Millisecond, "", 0))
-				return &Job{host: "h", tasks: ExecTask, opts: &Opts{Port: 22, ExecTimeout: 50 * time.Millisecond}}
+				return &Job{host: "h", tasks: ExecTask, port: 22, execTimeout: 50 * time.Millisecond}
 			},
 			err: os.ErrDeadlineExceeded,
 		},
@@ -162,9 +167,12 @@ func TestJobStart(t *testing.T) {
 				localFile := writeTestFile(t, "s.sh", testFileContent)
 				sshDialHandlerMock(t, compositeHandler(rejectSFTPHandler(), execRequestHandler("", 0)))
 				return &Job{
-					host:  "h",
-					tasks: UploadTask | ExecTask,
-					opts:  &Opts{Port: 22, ExecTimeout: time.Second, Files: []string{localFile}, UploadPath: "w"},
+					host:        "h",
+					tasks:       UploadTask | ExecTask,
+					port:        22,
+					execTimeout: time.Second,
+					files:       []string{localFile},
+					uploadPath:  "w",
 				}
 			},
 			err: ErrFileTransfer,
@@ -178,9 +186,12 @@ func TestJobStart(t *testing.T) {
 				t.Cleanup(func() { os.Chmod(remoteRoot, 0755) })
 				sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot), execRequestHandler("", 0)))
 				return &Job{
-					host:  "h",
-					tasks: UploadTask | ExecTask,
-					opts:  &Opts{Port: 22, ExecTimeout: time.Second, Files: []string{localFile}, UploadPath: "w"},
+					host:        "h",
+					tasks:       UploadTask | ExecTask,
+					port:        22,
+					execTimeout: time.Second,
+					files:       []string{localFile},
+					uploadPath:  "w",
 				}
 			},
 			err: ErrFileTransfer,
@@ -248,7 +259,7 @@ func TestJobDial(t *testing.T) {
 				sshDialHandlerMock(t, hardcodedOutputHandler("", 0))
 			}
 
-			j := &Job{host: tc.host, opts: newTestOpts(), out: NewOutput("h")}
+			j := &Job{host: tc.host, port: 22, execTimeout: time.Second, out: NewOutput("h")}
 			defer j.Close()
 
 			testCtx := ctx
@@ -291,7 +302,7 @@ func TestJobExec(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			sshDialHandlerMock(t, hardcodedOutputHandler("", tc.status))
-			j := &Job{host: "h", opts: newTestOpts(), out: NewOutput("h")}
+			j := &Job{host: "h", port: 22, execTimeout: time.Second, out: NewOutput("h")}
 			defer j.Close()
 
 			if err := j.Dial(context.Background()); err != nil {
@@ -324,10 +335,12 @@ func TestJobUpload(t *testing.T) {
 		))
 
 		j := &Job{
-			host:  "h",
-			tasks: UploadTask,
-			opts:  &Opts{Port: 22, Files: []string{localFile}, UploadPath: "uploads"},
-			out:   NewOutput("h"),
+			host:       "h",
+			tasks:      UploadTask,
+			port:       22,
+			files:      []string{localFile},
+			uploadPath: "uploads",
+			out:        NewOutput("h"),
 		}
 		defer j.Close()
 		dialAndSFTP(t, j)
@@ -355,10 +368,12 @@ func TestJobUpload(t *testing.T) {
 		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
 
 		j := &Job{
-			host:  "h",
-			tasks: UploadTask,
-			opts:  &Opts{Port: 22, Files: files, UploadPath: "up"},
-			out:   NewOutput("h"),
+			host:       "h",
+			tasks:      UploadTask,
+			port:       22,
+			files:      files,
+			uploadPath: "up",
+			out:        NewOutput("h"),
 		}
 		defer j.Close()
 		dialAndSFTP(t, j)
@@ -386,11 +401,13 @@ func TestJobUpload(t *testing.T) {
 		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
 
 		j := &Job{
-			host:  "h",
-			cmd:   "cat data.txt",
-			tasks: UploadTask,
-			opts:  &Opts{Port: 22, Files: []string{localFile}, UploadPath: "uploads"},
-			out:   NewOutput("h"),
+			host:       "h",
+			cmd:        "cat data.txt",
+			tasks:      UploadTask,
+			port:       22,
+			files:      []string{localFile},
+			uploadPath: "uploads",
+			out:        NewOutput("h"),
 		}
 		defer j.Close()
 		dialAndSFTP(t, j)
@@ -412,7 +429,7 @@ func TestJobUpload(t *testing.T) {
 		{"missing_file", nil, func(t *testing.T, j *Job) {
 			remoteRoot := t.TempDir()
 			sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
-			j.opts.Files = []string{"/nonexistent"}
+			j.files = []string{"/nonexistent"}
 			dialAndSFTP(t, j)
 		}},
 		{"mkdir_fail", nil, func(t *testing.T, j *Job) {
@@ -420,7 +437,7 @@ func TestJobUpload(t *testing.T) {
 			os.Chmod(remoteRoot, 0555)
 			t.Cleanup(func() { os.Chmod(remoteRoot, 0755) })
 			sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
-			j.opts.Files = []string{writeTestFile(t, "s.sh", testFileContent)}
+			j.files = []string{writeTestFile(t, "s.sh", testFileContent)}
 			dialAndSFTP(t, j)
 		}},
 	}
@@ -428,10 +445,11 @@ func TestJobUpload(t *testing.T) {
 	for _, tc := range errCases {
 		t.Run("bad_"+tc.name, func(t *testing.T) {
 			j := &Job{
-				host:  "h",
-				tasks: UploadTask,
-				opts:  &Opts{Port: 22, UploadPath: "up"},
-				out:   NewOutput("h"),
+				host:       "h",
+				tasks:      UploadTask,
+				port:       22,
+				uploadPath: "up",
+				out:        NewOutput("h"),
 			}
 			defer j.Close()
 
@@ -468,10 +486,12 @@ func TestJobStartRetries(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			j := &Job{
-				host:  "h",
-				tasks: ExecTask,
-				tries: tc.tries,
-				opts:  &Opts{Port: 22, ExecTimeout: time.Second, Retries: tc.retries},
+				host:        "h",
+				tasks:       ExecTask,
+				tries:       tc.tries,
+				port:        22,
+				execTimeout: time.Second,
+				maxRetries:  tc.retries,
 			}
 			defer j.Close()
 

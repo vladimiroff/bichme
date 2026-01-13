@@ -23,11 +23,16 @@ var (
 // Job represents a single task to be executed on a single host. A job holds
 // its information while going through retries until completion or exhaustion.
 type Job struct {
-	host   string
-	cmd    string
-	tries  int
-	opts   *Opts
-	config *ssh.ClientConfig // TODO: saner name
+	host        string
+	port        int
+	cmd         string
+	tries       int
+	sshConfig   *ssh.ClientConfig
+	execTimeout time.Duration
+	maxRetries  int
+	files       []string
+	uploadPath  string
+	historyPath string
 
 	// handles
 	ssh  *ssh.Client
@@ -70,7 +75,7 @@ func (j *Job) Start(ctx context.Context) error {
 
 	var err error
 	defer func() {
-		if err == nil || j.tries > j.opts.Retries {
+		if err == nil || j.tries > j.maxRetries {
 			j.tasks = 0
 		}
 		// TODO: recognize err type and fill j.(conn|file|exec|)Err
@@ -80,7 +85,7 @@ func (j *Job) Start(ctx context.Context) error {
 	}()
 
 	if j.tasks.Has(KeepHistoryTask) {
-		filename := filepath.Join(j.opts.HistoryPath, fmt.Sprintf("%s_%d.log", j.hostname(), j.tries))
+		filename := filepath.Join(j.historyPath, fmt.Sprintf("%s_%d.log", j.hostname(), j.tries))
 		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 		if err != nil {
 			slog.Error("Failed to open output file", "host", j.host, "error", err)
@@ -115,16 +120,14 @@ func (j *Job) Start(ctx context.Context) error {
 	return err
 }
 
-// Upload files from Job's opts.Files and make sure the first one will be
-// executed if no command is given.
+// Upload files and make sure the first one will be executable.
 func (j *Job) Upload(ctx context.Context) error {
-	remoteDir := j.opts.UploadPath
-	if err := upload(ctx, j.sftp, remoteDir, j.opts.Files...); err != nil {
+	if err := upload(ctx, j.sftp, j.uploadPath, j.files...); err != nil {
 		return fmt.Errorf("upload: %w", err)
 	}
 
-	if len(j.opts.Files) > 0 {
-		filename := filepath.Join(remoteDir, filepath.Base(j.opts.Files[0]))
+	if len(j.files) > 0 {
+		filename := filepath.Join(j.uploadPath, filepath.Base(j.files[0]))
 		if err := makeExec(ctx, j.sftp, filename); err != nil {
 			return fmt.Errorf("make exec: %w", err)
 		}
@@ -144,12 +147,12 @@ func (j *Job) Dial(ctx context.Context) error {
 
 	addr := j.host
 	if !strings.Contains(addr, ":") { // TODO: move this while parsing
-		addr += fmt.Sprintf(":%d", j.opts.Port)
+		addr += fmt.Sprintf(":%d", j.port)
 	}
 
 	ch := make(chan error)
 	go func() {
-		client, err := sshDial("tcp", addr, j.config)
+		client, err := sshDial("tcp", addr, j.sshConfig)
 		j.ssh = client
 		ch <- err
 	}()
@@ -178,7 +181,7 @@ func (j *Job) Exec(ctx context.Context) error {
 	errCh := make(chan error)
 	go func() { errCh <- session.Run(j.cmd + "\n") }()
 	select {
-	case <-time.After(j.opts.ExecTimeout):
+	case <-time.After(j.execTimeout):
 		return os.ErrDeadlineExceeded
 	case err = <-errCh:
 		return err

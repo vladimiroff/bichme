@@ -16,10 +16,8 @@ import (
 
 var id = runID()
 
-// Opts is a quick and dirty way to pass CLI args from ./cmd, without having a
-// special "Runner" type or tossing around things in the global namespace.
-//
-// TODO: figure out a saner approach.
+// Opts carries CLI arguments from ./cmd into Run(). Values are copied into
+// each Job at creation time - jobs don't share this struct.
 type Opts struct {
 	User        string
 	Port        int
@@ -103,19 +101,25 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			server = parts[1]
 		}
 
-		j := &Job{
-			host:   server,
-			cmd:    cmd,
-			opts:   &opts,
-			config: cfg,
-			tasks:  ExecTask,
-			// cleanup: true,
-		}
+		tasks := ExecTask
 		if len(opts.Files) > 0 {
-			j.tasks.Set(UploadTask)
+			tasks.Set(UploadTask)
 		}
 		if opts.History {
-			j.tasks.Set(KeepHistoryTask)
+			tasks.Set(KeepHistoryTask)
+		}
+
+		j := &Job{
+			host:        server,
+			cmd:         cmd,
+			sshConfig:   cfg,
+			tasks:       tasks,
+			port:        opts.Port,
+			execTimeout: opts.ExecTimeout,
+			maxRetries:  opts.Retries,
+			files:       opts.Files,
+			uploadPath:  opts.UploadPath,
+			historyPath: opts.HistoryPath,
 		}
 
 		jobs[server] = j

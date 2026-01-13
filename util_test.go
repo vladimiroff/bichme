@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/pkg/sftp"
 )
@@ -54,10 +53,6 @@ func readLines(r io.Reader) []string {
 		lines = append(lines, scanner.Text())
 	}
 	return lines
-}
-
-func newTestOpts() *Opts {
-	return &Opts{Port: 22, ExecTimeout: time.Second}
 }
 
 func dialAndSFTP(t *testing.T, j *Job) {

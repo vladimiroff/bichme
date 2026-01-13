@@ -18,17 +18,11 @@ func runID() string {
 }
 
 func sshIsAlive(c *ssh.Client) bool {
-	var err error
-	defer func() {
-		if err != nil {
-			slog.Debug("sshIsAlive failed", "error", err)
-		}
-	}()
 	s, err := c.NewSession()
 	if err != nil {
+		slog.Debug("sshIsAlive failed", "error", err)
 		return false
 	}
-
-	err = s.Wait()
-	return err == nil
+	s.Close()
+	return true
 }

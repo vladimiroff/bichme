@@ -104,6 +104,8 @@ func sftpIsAlive(c *sftp.Client) bool {
 
 func randHex(n int) string {
 	b := make([]byte, n)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
 	return hex.EncodeToString(b)
 }

@@ -106,7 +106,7 @@ func ListHistory(root string) ([]HistoryItem, error) {
 					slog.Error("Failed to read command", "path", path, "error", err)
 					return nil
 				}
-				entry.Command = string(f)
+				entry.Command = strings.TrimSpace(string(f))
 			case "files":
 				f, err := fs.ReadFile(fsys, path)
 				if err != nil {

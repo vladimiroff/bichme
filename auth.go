@@ -1,6 +1,7 @@
 package bichme
 
 import (
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -8,6 +9,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 // loadSSHAuth returns SSH auth methods by trying the SSH agent first,
@@ -84,4 +86,31 @@ func loadPrivateKey(path string) (ssh.Signer, error) {
 		return nil, err
 	}
 	return ssh.ParsePrivateKey(data)
+}
+
+// loadHostKeyCallback returns an SSH host key callback. If insecure is true,
+// it returns a callback that accepts any host key. Otherwise, it reads
+// ~/.ssh/known_hosts and /etc/ssh/ssh_known_hosts for verification.
+func loadHostKeyCallback(insecure bool) (ssh.HostKeyCallback, error) {
+	if insecure {
+		return ssh.InsecureIgnoreHostKey(), nil
+	}
+
+	var files []string
+	if home, err := os.UserHomeDir(); err == nil {
+		userKnownHosts := filepath.Join(home, ".ssh", "known_hosts")
+		if _, err := os.Stat(userKnownHosts); err == nil {
+			files = append(files, userKnownHosts)
+		}
+	}
+	systemKnownHosts := "/etc/ssh/ssh_known_hosts"
+	if _, err := os.Stat(systemKnownHosts); err == nil {
+		files = append(files, systemKnownHosts)
+	}
+
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no ssh known_hosts files found")
+	}
+
+	return knownhosts.New(files...)
 }

@@ -57,4 +57,5 @@ func init() {
 	execCmd.Flags().DurationVar(&connectTimeout, "conn-timeout", 30*time.Second, "connection timeout")
 	execCmd.Flags().DurationVarP(&executeTimeout, "exec-timeout", "t", 1*time.Hour, "execution timeout")
 	execCmd.Flags().BoolVar(&history, "history", true, "write execution into history")
+	execCmd.Flags().BoolVar(&insecure, "insecure", false, "skip host key verification")
 }

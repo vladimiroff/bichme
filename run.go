@@ -2,6 +2,7 @@ package bichme
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -29,6 +30,7 @@ type Opts struct {
 	History     bool
 	HistoryPath string
 	UploadPath  string
+	Insecure    bool
 }
 
 type jobResult struct {
@@ -43,6 +45,10 @@ func writeMetaFile(path, name, content string) error {
 func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	start := time.Now()
 	auths := loadSSHAuth()
+	hostKeyCallback, err := loadHostKeyCallback(opts.Insecure)
+	if err != nil {
+		return fmt.Errorf("load host key verification: %w", err)
+	}
 
 	jobCh := make(chan *Job)
 	resCh := make(chan jobResult)
@@ -90,7 +96,7 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		cfg := &ssh.ClientConfig{
 			User:            opts.User,
 			Auth:            auths,
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			HostKeyCallback: hostKeyCallback,
 			Timeout:         opts.ConnTimeout,
 			ClientVersion:   "SSH-2.0-bichme" + Version(),
 		}

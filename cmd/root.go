@@ -27,12 +27,13 @@ var (
 
 // Arguments that are used by both shell and exec
 var (
-	user    string
-	port    int
-	retries int
-	history bool
-	workers int
-	files   []string
+	user     string
+	port     int
+	retries  int
+	history  bool
+	workers  int
+	files    []string
+	insecure bool
 
 	connectTimeout time.Duration
 	executeTimeout time.Duration
@@ -51,6 +52,7 @@ func opts() bichme.Opts {
 		History:     history,
 		HistoryPath: historyPath,
 		UploadPath:  uploadPath,
+		Insecure:    insecure,
 	}
 }
 

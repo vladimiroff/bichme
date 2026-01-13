@@ -24,7 +24,7 @@ func WriteStats(w io.Writer, archive map[*Job]error) error {
 			statuses["conn"] += 1
 		case errors.Is(err, ErrFileTransfer):
 			statuses["file"] += 1
-		case errors.Is(err, ErrExection):
+		case errors.Is(err, ErrExecution):
 			statuses["exec"] += 1
 		default:
 			slog.Debug("Job is in a bad state", "host", job.host, "error", err)

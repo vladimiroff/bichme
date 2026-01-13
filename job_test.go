@@ -151,7 +151,7 @@ func TestJobStart(t *testing.T) {
 				sshDialHandlerMock(t, hardcodedOutputHandler("", 1))
 				return &Job{host: "h", tasks: ExecTask, port: 22, execTimeout: time.Second, maxRetries: 1}
 			},
-			err: ErrExection,
+			err: ErrExecution,
 		},
 		{
 			name: "timeout",

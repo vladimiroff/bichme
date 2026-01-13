@@ -17,7 +17,7 @@ import (
 var (
 	ErrConnection   = errors.New("connection failed")
 	ErrFileTransfer = errors.New("file transfer failed")
-	ErrExection     = errors.New("exection failed")
+	ErrExecution    = errors.New("execution failed")
 )
 
 // Job represents a single task to be executed on a single host. A job holds
@@ -117,7 +117,7 @@ func (j *Job) Start(ctx context.Context) error {
 	}
 	if j.tasks.Has(ExecTask) {
 		if err = j.Exec(ctx); err != nil {
-			err = fmt.Errorf("%w: %w", ErrExection, err)
+			err = fmt.Errorf("%w: %w", ErrExecution, err)
 		}
 	}
 

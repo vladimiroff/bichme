@@ -8,6 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/pkg/sftp"
 )
 
 var ctx = context.Background()
@@ -51,4 +54,26 @@ func readLines(r io.Reader) []string {
 		lines = append(lines, scanner.Text())
 	}
 	return lines
+}
+
+func newTestOpts() *Opts {
+	return &Opts{Port: 22, ExecTimeout: time.Second}
+}
+
+func dialAndSFTP(t *testing.T, j *Job) {
+	t.Helper()
+	if err := j.Dial(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var err error
+	j.sftp, err = sftp.NewClient(j.ssh)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func cancelledCtx() context.Context {
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+	return ctx
 }

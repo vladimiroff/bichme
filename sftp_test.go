@@ -200,10 +200,7 @@ func TestMakeExec(t *testing.T) {
 
 	t.Run("cancelled", func(t *testing.T) {
 		client := newInMemSFTP(t, sftp.InMemHandler())
-
-		ctx, cancel := context.WithCancel(ctx)
-		cancel()
-
+		ctx := cancelledCtx()
 		err := makeExec(ctx, client, "/script.sh")
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("expected context.Canceled, got %v", err)

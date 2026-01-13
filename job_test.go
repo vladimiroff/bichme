@@ -12,24 +12,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-var ctx = context.Background()
-
-var devNull *os.File
-
-func init() {
-	var err error
-	devNull, err = os.Open(os.DevNull)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func discardStdout(t *testing.T) {
-	init := os.Stdout
-	t.Cleanup(func() { os.Stdout = init })
-	os.Stdout = devNull
-}
-
 func TestJobClose(t *testing.T) {
 	sshDialHandlerMock(t, hardcodedOutputHandler("", 0))
 

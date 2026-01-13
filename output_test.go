@@ -1,15 +1,12 @@
-package bichme_test
+package bichme
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"testing"
-
-	"bichme"
 )
 
 func TestOutput(t *testing.T) {
@@ -44,7 +41,7 @@ func TestOutput(t *testing.T) {
 
 			t.Run(fmt.Sprintf("%s%s", tc.name, suffix), func(t *testing.T) {
 				stdout := new(bytes.Buffer)
-				out := bichme.NewOutput(tc.name)
+				out := NewOutput(tc.name)
 				out.SetStdout(stdout)
 				defer out.Close()
 
@@ -84,13 +81,4 @@ func TestOutput(t *testing.T) {
 			})
 		}
 	}
-}
-
-func readLines(r io.Reader) []string {
-	var lines []string
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	return lines
 }

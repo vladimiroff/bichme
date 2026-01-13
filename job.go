@@ -45,17 +45,21 @@ type Job struct {
 
 func (j Job) hostname() string { return strings.SplitN(j.host, ":", 2)[0] }
 
-// Close implements io.Closer.
+// Close implements io.Closer. Close is idempotent; calling it multiple times
+// returns nil after the first call.
 func (j *Job) Close() error {
 	var err error
 	if j.sftp != nil {
-		errors.Join(err, j.sftp.Close())
+		err = errors.Join(err, j.sftp.Close())
+		j.sftp = nil
 	}
 	if j.ssh != nil {
-		errors.Join(err, j.ssh.Close())
+		err = errors.Join(err, j.ssh.Close())
+		j.ssh = nil
 	}
-	if j.ssh != nil {
-		errors.Join(err, j.out.Close())
+	if j.out != nil {
+		err = errors.Join(err, j.out.Close())
+		j.out = nil
 	}
 	return err
 }

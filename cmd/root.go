@@ -107,7 +107,7 @@ func Execute(ctx context.Context) {
 }
 
 func die(format string, v ...any) {
-	fmt.Fprintf(os.Stdout, format+"\n", v...)
+	fmt.Fprintf(os.Stderr, format+"\n", v...)
 	os.Exit(1)
 }
 

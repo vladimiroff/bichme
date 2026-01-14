@@ -8,7 +8,6 @@
 package bichme
 
 import (
-	"bytes"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -254,9 +253,6 @@ func compositeHandler(handlers ...requestHandler) sshHandler {
 func sftpSubsystemHandler(cwd string) requestHandler {
 	return func(ch ssh.Channel, req *ssh.Request, t *testing.T) bool {
 		if req.Type != "subsystem" {
-			return false
-		}
-		if bytes.HasPrefix(req.Payload, []byte("sftp")) {
 			return false
 		}
 		req.Reply(true, nil)

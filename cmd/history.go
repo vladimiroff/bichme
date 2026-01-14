@@ -102,8 +102,9 @@ var historyPurgeCmd = &cobra.Command{
 				(purgeKeep > 0 && purgeKeep <= i) ||
 				(purgeOlderThan > 0 && now.Sub(item.Time) > purgeOlderThan) {
 
-				slog.Info("Deleting", "id", i+1, "from", item.Time, "error", err)
-				err = errors.Join(err, item.Delete())
+				delErr := item.Delete()
+				slog.Info("Deleted", "id", i+1, "from", item.Time, "error", delErr)
+				err = errors.Join(err, delErr)
 			}
 		}
 	},

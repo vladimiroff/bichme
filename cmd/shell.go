@@ -18,9 +18,10 @@ var shellCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(2),
 	PreRunE: func(_ *cobra.Command, _ []string) error {
 		return errors.Join(
+			minLen("user", user, 1),
 			minInt("port", port, 1), maxInt("port", port, 65535),
 			minInt("workers", workers, 1),
-			minLen("user", user, 1),
+			minInt("retries", retries, 1),
 		)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {

@@ -20,5 +20,5 @@ func (t *Tasks) Set(flag Tasks) { *t |= flag }
 // Unset given flag from t.
 func (t *Tasks) Unset(flag Tasks) { *t &^= flag }
 
-// Done reports wheter all flags from t are unset.
+// Done reports whether all flags from t are unset.
 func (t *Tasks) Done() bool { return *t == 0 }

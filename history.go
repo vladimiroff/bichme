@@ -58,7 +58,7 @@ func (hi HistoryItem) Delete() error { return os.RemoveAll(hi.Path) }
 func ListHistory(root string) ([]HistoryItem, error) {
 	fsys := os.DirFS(root)
 	items := make(map[string]HistoryItem)
-	fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			slog.Error("Walkdir failed", "error", err)
 			return err
@@ -152,11 +152,13 @@ func ListHistory(root string) ([]HistoryItem, error) {
 
 		return nil
 	})
-
+	if err != nil {
+		err = fmt.Errorf("walking history directory: %w", err)
+	}
 	sortFunc := func(a, b HistoryItem) int {
 		return cmp.Compare(b.Time.UnixMicro(), a.Time.UnixMicro())
 	}
-	return slices.SortedFunc(maps.Values(items), sortFunc), nil
+	return slices.SortedFunc(maps.Values(items), sortFunc), err
 }
 
 func entryTime(path string) (time.Time, error) {

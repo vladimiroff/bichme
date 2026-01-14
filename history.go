@@ -80,11 +80,12 @@ func ListHistory(root string) ([]HistoryItem, error) {
 			items[path] = HistoryItem{Path: filepath.Join(root, path), Time: t}
 		case 2:
 			if d.IsDir() {
-				return nil
+				return fs.SkipDir
 			}
 			entry, ok := items[entryName(path)]
 			if !ok {
-				panic(path)
+				slog.Error("Unexpected file in history", "path", path)
+				return nil
 			}
 			switch d.Name() {
 			case "start":

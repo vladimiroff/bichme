@@ -98,7 +98,7 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			Auth:            auths,
 			HostKeyCallback: hostKeyCallback,
 			Timeout:         opts.ConnTimeout,
-			ClientVersion:   "SSH-2.0-bichme" + Version(),
+			ClientVersion:   "SSH-2.0-bichme-" + Version(),
 		}
 
 		if strings.Contains(server, "@") {

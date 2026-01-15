@@ -42,5 +42,5 @@ func init() {
 	shellCmd.Flags().DurationVar(&connectTimeout, "conn-timeout", 30*time.Second, "connection timeout")
 	shellCmd.Flags().DurationVarP(&executeTimeout, "exec-timeout", "t", 1*time.Hour, "execution timeout")
 	shellCmd.Flags().BoolVar(&history, "history", true, "write execution into history")
-	shellCmd.Flags().BoolVar(&insecure, "insecure", false, "skip host key verification")
+	shellCmd.Flags().BoolVarP(&insecure, "insecure", "i", false, "skip host key verification")
 }

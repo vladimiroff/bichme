@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/pkg/sftp"
@@ -45,7 +46,7 @@ func uploadFile(c *sftp.Client, dir, file string) (err error) {
 	}
 	defer local.Close()
 
-	filename := filepath.Join(dir, filepath.Base(file))
+	filename := path.Join(dir, filepath.Base(file))
 	tempname := fmt.Sprintf("%s_%s.tmp", filename, randHex(32))
 	temp, err := c.Create(tempname)
 	if err != nil {

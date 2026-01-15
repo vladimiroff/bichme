@@ -20,17 +20,18 @@ var id = runID()
 // Opts carries CLI arguments from ./cmd into Run(). Values are copied into
 // each Job at creation time - jobs don't share this struct.
 type Opts struct {
-	User        string
-	Port        int
-	Retries     int
-	Workers     int
-	Files       []string
-	ConnTimeout time.Duration
-	ExecTimeout time.Duration
-	History     bool
-	HistoryPath string
-	UploadPath  string
-	Insecure    bool
+	User         string
+	Port         int
+	Retries      int
+	Workers      int
+	Files        []string
+	ConnTimeout  time.Duration
+	ExecTimeout  time.Duration
+	History      bool
+	HistoryPath  string
+	UploadPath   string
+	Insecure     bool
+	DownloadPath string
 }
 
 type jobResult struct {
@@ -107,8 +108,15 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			server = parts[1]
 		}
 
-		tasks := ExecTask
-		if len(opts.Files) > 0 {
+		var tasks Tasks
+		if cmd != "" {
+			tasks.Set(ExecTask)
+		}
+		path := opts.UploadPath
+		if len(opts.Files) > 0 && opts.DownloadPath != "" {
+			tasks.Set(DownloadTask)
+			path = opts.DownloadPath
+		} else if len(opts.Files) > 0 {
 			tasks.Set(UploadTask)
 		}
 		if opts.History {
@@ -124,7 +132,7 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			execTimeout: opts.ExecTimeout,
 			maxRetries:  opts.Retries,
 			files:       opts.Files,
-			uploadPath:  opts.UploadPath,
+			path:        path,
 			historyPath: opts.HistoryPath,
 		}
 

@@ -108,7 +108,7 @@ func TestJobStart(t *testing.T) {
 			port:        22,
 			execTimeout: time.Second,
 			files:       []string{localFile},
-			uploadPath:  "work",
+			path:        "work",
 		}
 		defer j.Close()
 
@@ -172,7 +172,7 @@ func TestJobStart(t *testing.T) {
 					port:        22,
 					execTimeout: time.Second,
 					files:       []string{localFile},
-					uploadPath:  "w",
+					path:        "w",
 				}
 			},
 			err: ErrFileTransfer,
@@ -191,7 +191,43 @@ func TestJobStart(t *testing.T) {
 					port:        22,
 					execTimeout: time.Second,
 					files:       []string{localFile},
-					uploadPath:  "w",
+					path:        "w",
+				}
+			},
+			err: ErrFileTransfer,
+		},
+		{
+			name: "download_sftp_fail",
+			setup: func(t *testing.T) *Job {
+				sshDialHandlerMock(t, compositeHandler(rejectSFTPHandler()))
+				return &Job{
+					host:  "h",
+					tasks: DownloadTask,
+					port:  22,
+					files: []string{"/any"},
+					path:  t.TempDir(),
+				}
+			},
+			err: ErrFileTransfer,
+		},
+		{
+			name: "download_fail",
+			setup: func(t *testing.T) *Job {
+				remoteRoot := t.TempDir()
+				localRoot := t.TempDir()
+				if err := os.WriteFile(filepath.Join(remoteRoot, "file.txt"), []byte("data"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+				if err := os.WriteFile(filepath.Join(localRoot, "h"), []byte("blocker"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				return &Job{
+					host:  "h",
+					tasks: DownloadTask,
+					port:  22,
+					files: []string{"file.txt"},
+					path:  localRoot,
 				}
 			},
 			err: ErrFileTransfer,
@@ -335,12 +371,12 @@ func TestJobUpload(t *testing.T) {
 		))
 
 		j := &Job{
-			host:       "h",
-			tasks:      UploadTask,
-			port:       22,
-			files:      []string{localFile},
-			uploadPath: "uploads",
-			out:        NewOutput("h"),
+			host:  "h",
+			tasks: UploadTask,
+			port:  22,
+			files: []string{localFile},
+			path:  "uploads",
+			out:   NewOutput("h"),
 		}
 		defer j.Close()
 		dialAndSFTP(t, j)
@@ -368,12 +404,12 @@ func TestJobUpload(t *testing.T) {
 		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
 
 		j := &Job{
-			host:       "h",
-			tasks:      UploadTask,
-			port:       22,
-			files:      files,
-			uploadPath: "up",
-			out:        NewOutput("h"),
+			host:  "h",
+			tasks: UploadTask,
+			port:  22,
+			files: files,
+			path:  "up",
+			out:   NewOutput("h"),
 		}
 		defer j.Close()
 		dialAndSFTP(t, j)
@@ -401,13 +437,13 @@ func TestJobUpload(t *testing.T) {
 		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
 
 		j := &Job{
-			host:       "h",
-			cmd:        "cat data.txt",
-			tasks:      UploadTask,
-			port:       22,
-			files:      []string{localFile},
-			uploadPath: "uploads",
-			out:        NewOutput("h"),
+			host:  "h",
+			cmd:   "cat data.txt",
+			tasks: UploadTask,
+			port:  22,
+			files: []string{localFile},
+			path:  "uploads",
+			out:   NewOutput("h"),
 		}
 		defer j.Close()
 		dialAndSFTP(t, j)
@@ -445,11 +481,11 @@ func TestJobUpload(t *testing.T) {
 	for _, tc := range errCases {
 		t.Run("bad_"+tc.name, func(t *testing.T) {
 			j := &Job{
-				host:       "h",
-				tasks:      UploadTask,
-				port:       22,
-				uploadPath: "up",
-				out:        NewOutput("h"),
+				host:  "h",
+				tasks: UploadTask,
+				port:  22,
+				path:  "up",
+				out:   NewOutput("h"),
 			}
 			defer j.Close()
 
@@ -501,4 +537,158 @@ func TestJobStartRetries(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestJobDownload(t *testing.T) {
+	t.Run("ok", func(t *testing.T) {
+		remoteRoot := t.TempDir()
+		localRoot := t.TempDir()
+
+		remoteFile := filepath.Join(remoteRoot, "data.txt")
+		if err := os.WriteFile(remoteFile, []byte(testFileContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+
+		j := &Job{
+			host:  "h",
+			tasks: DownloadTask,
+			port:  22,
+			files: []string{"data.txt"}, // relative to remoteRoot (sftp server cwd)
+			path:  localRoot,
+			out:   NewOutput("h"),
+		}
+		defer j.Close()
+		dialAndSFTP(t, j)
+
+		if err := j.Download(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		content, err := os.ReadFile(filepath.Join(localRoot, "h", "data.txt"))
+		if err != nil {
+			t.Fatalf("downloaded file not found: %v", err)
+		}
+		if string(content) != testFileContent {
+			t.Errorf("content = %q, want %q", content, testFileContent)
+		}
+	})
+
+	t.Run("multiple_files_with_glob", func(t *testing.T) {
+		remoteRoot := t.TempDir()
+		localRoot := t.TempDir()
+
+		logsDir := filepath.Join(remoteRoot, "logs")
+		if err := os.MkdirAll(logsDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"app.log", "error.log", "config.txt"} {
+			if err := os.WriteFile(filepath.Join(logsDir, name), []byte(name), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+
+		j := &Job{
+			host:  "server1",
+			tasks: DownloadTask,
+			port:  22,
+			files: []string{"logs/*.log"}, // relative to remoteRoot
+			path:  localRoot,
+			out:   NewOutput("server1"),
+		}
+		defer j.Close()
+		dialAndSFTP(t, j)
+
+		if err := j.Download(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, name := range []string{"app.log", "error.log"} {
+			content, err := os.ReadFile(filepath.Join(localRoot, "server1", "logs", name))
+			if err != nil {
+				t.Errorf("expected %s: %v", name, err)
+				continue
+			}
+			if string(content) != name {
+				t.Errorf("%s content = %q, want %q", name, content, name)
+			}
+		}
+
+		// config.txt should not exist
+		if _, err := os.Stat(filepath.Join(localRoot, "server1", "logs", "config.txt")); err == nil {
+			t.Error("config.txt should not have been downloaded")
+		}
+	})
+}
+
+func TestJobStartWithDownload(t *testing.T) {
+	discardStdout(t)
+
+	t.Run("download_only", func(t *testing.T) {
+		remoteRoot := t.TempDir()
+		localRoot := t.TempDir()
+
+		if err := os.WriteFile(filepath.Join(remoteRoot, "file.txt"), []byte("data"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+
+		j := &Job{
+			host:  "h",
+			tasks: DownloadTask,
+			port:  22,
+			files: []string{"file.txt"},
+			path:  localRoot,
+		}
+		defer j.Close()
+
+		if err := j.Start(ctx); err != nil {
+			t.Error(err)
+		}
+		if !j.tasks.Done() {
+			t.Error("tasks not done")
+		}
+		if _, err := os.Stat(filepath.Join(localRoot, "h", "file.txt")); err != nil {
+			t.Errorf("file not downloaded: %v", err)
+		}
+	})
+
+	t.Run("exec_then_download", func(t *testing.T) {
+		remoteRoot := t.TempDir()
+		localRoot := t.TempDir()
+
+		if err := os.WriteFile(filepath.Join(remoteRoot, "output.txt"), []byte("result"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		sshDialHandlerMock(t, compositeHandler(
+			sftpSubsystemHandler(remoteRoot),
+			execRequestHandler("done", 0),
+		))
+
+		j := &Job{
+			host:        "h",
+			cmd:         "echo done",
+			tasks:       ExecTask | DownloadTask,
+			port:        22,
+			execTimeout: time.Second,
+			files:       []string{"output.txt"},
+			path:        localRoot,
+		}
+		defer j.Close()
+
+		if err := j.Start(ctx); err != nil {
+			t.Error(err)
+		}
+		if !j.tasks.Done() {
+			t.Error("tasks not done")
+		}
+		if _, err := os.Stat(filepath.Join(localRoot, "h", "output.txt")); err != nil {
+			t.Errorf("file not downloaded: %v", err)
+		}
+	})
 }

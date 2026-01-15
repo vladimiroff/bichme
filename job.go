@@ -30,8 +30,8 @@ type Job struct {
 	sshConfig   *ssh.ClientConfig
 	execTimeout time.Duration
 	maxRetries  int
-	files       []string
-	uploadPath  string
+	files       []string // local files to upload OR remote patterns to download
+	path        string   // remote dir for uploads OR local dir for downloads
 	historyPath string
 
 	// handles
@@ -120,23 +120,43 @@ func (j *Job) Start(ctx context.Context) error {
 			err = fmt.Errorf("%w: %w", ErrExecution, err)
 		}
 	}
+	if j.tasks.Has(DownloadTask) {
+		if j.sftp == nil || !sftpIsAlive(j.sftp) {
+			j.sftp, err = sftp.NewClient(j.ssh)
+			if err != nil {
+				return fmt.Errorf("%w: open sftp session: %w", ErrFileTransfer, err)
+			}
+		}
+		if err = j.Download(ctx); err != nil {
+			err = fmt.Errorf("%w: %w", ErrFileTransfer, err)
+		}
+	}
 
 	return err
 }
 
 // Upload files and make sure the first one will be executable.
 func (j *Job) Upload(ctx context.Context) error {
-	if err := upload(ctx, j.sftp, j.uploadPath, j.files...); err != nil {
+	if err := upload(ctx, j.sftp, j.path, j.files...); err != nil {
 		return fmt.Errorf("upload: %w", err)
 	}
 
 	if len(j.files) > 0 {
-		filename := filepath.Join(j.uploadPath, filepath.Base(j.files[0]))
+		filename := filepath.Join(j.path, filepath.Base(j.files[0]))
 		if err := makeExec(ctx, j.sftp, filename); err != nil {
 			return fmt.Errorf("make exec: %w", err)
 		}
 	}
 
+	return nil
+}
+
+// Download files from the remote host to local directory.
+func (j *Job) Download(ctx context.Context) error {
+	localDir := filepath.Join(j.path, j.hostname())
+	if err := download(ctx, j.sftp, localDir, j.files...); err != nil {
+		return fmt.Errorf("download: %w", err)
+	}
 	return nil
 }
 

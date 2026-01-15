@@ -20,9 +20,11 @@ var (
 	verbose     bool   // sets DEBUG as default log level when enabled
 	historyPath string // defines where are executions logged.
 	uploadPath  string // defines where are files uploaded.
+	outputPath  string // defines where files are downloaded to.
 
 	defaultHistoryPath = os.ExpandEnv("$HOME/.local/state/bichme/history/")
 	defaultUploadPath  = ""
+	defaultOutputPath  = "."
 )
 
 // Arguments that are used by both shell and exec
@@ -42,17 +44,18 @@ var (
 // opts populates cli args into bichme.Opts.
 func opts() bichme.Opts {
 	return bichme.Opts{
-		User:        user,
-		Port:        port,
-		Retries:     retries,
-		Workers:     workers,
-		Files:       files,
-		ConnTimeout: connectTimeout,
-		ExecTimeout: executeTimeout,
-		History:     history,
-		HistoryPath: historyPath,
-		UploadPath:  uploadPath,
-		Insecure:    insecure,
+		User:         user,
+		Port:         port,
+		Retries:      retries,
+		Workers:      workers,
+		Files:        files,
+		ConnTimeout:  connectTimeout,
+		ExecTimeout:  executeTimeout,
+		History:      history,
+		HistoryPath:  historyPath,
+		UploadPath:   uploadPath,
+		Insecure:     insecure,
+		DownloadPath: outputPath,
 	}
 }
 

@@ -29,7 +29,7 @@ var shellCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("read servers: %w", err)
 		}
-		return bichme.Run(cmd.Context(), hosts, strings.Join(args[1:], " "), opts())
+		return bichme.Run(cmd.Context(), hosts, strings.Join(args[1:], " "), opts(bichme.ExecTask))
 	},
 }
 

@@ -38,7 +38,7 @@ Examples:
 			return fmt.Errorf("read servers: %w", err)
 		}
 		files = args[1:] // remote patterns to download
-		return bichme.Run(cmd.Context(), hosts, "", opts())
+		return bichme.Run(cmd.Context(), hosts, "", opts(bichme.DownloadTask))
 	},
 }
 

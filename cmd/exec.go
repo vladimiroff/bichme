@@ -44,7 +44,7 @@ var execCmd = &cobra.Command{
 		if uploadPath != "" {
 			command = path.Join(uploadPath, info.Name())
 		}
-		return bichme.Run(cmd.Context(), hosts, command, opts())
+		return bichme.Run(cmd.Context(), hosts, command, opts(bichme.ExecTask|bichme.UploadTask))
 	},
 }
 

@@ -32,6 +32,7 @@ type Opts struct {
 	UploadPath   string
 	Insecure     bool
 	DownloadPath string
+	Tasks        Tasks
 }
 
 type jobResult struct {
@@ -111,26 +112,18 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			ClientVersion:     "SSH-2.0-bichme-" + Version(),
 		}
 
-		var tasks Tasks
-		if cmd != "" {
-			tasks.Set(ExecTask)
-		}
-		path := opts.UploadPath
-		if len(opts.Files) > 0 && opts.DownloadPath != "" {
-			tasks.Set(DownloadTask)
+		var path string
+		if opts.Tasks.Has(UploadTask) {
+			path = opts.UploadPath
+		} else if opts.Tasks.Has(DownloadTask) {
 			path = opts.DownloadPath
-		} else if len(opts.Files) > 0 {
-			tasks.Set(UploadTask)
-		}
-		if opts.History {
-			tasks.Set(KeepHistoryTask)
 		}
 
 		j := &Job{
 			host:        server,
 			cmd:         cmd,
 			sshConfig:   cfg,
-			tasks:       tasks,
+			tasks:       opts.Tasks,
 			port:        opts.Port,
 			execTimeout: opts.ExecTimeout,
 			maxRetries:  opts.Retries,

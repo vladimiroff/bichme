@@ -41,8 +41,14 @@ var (
 	executeTimeout time.Duration
 )
 
-// opts populates cli args into bichme.Opts.
-func opts() bichme.Opts {
+// opts populates cli args into bichme.Opts. It takes Tasks as an argument as
+// the command is supposed to know what tasks is to perform. On top of the
+// given t it toggles history which is resolved by --history.
+func opts(t bichme.Tasks) bichme.Opts {
+	if history {
+		t.Set(bichme.KeepHistoryTask)
+	}
+
 	return bichme.Opts{
 		User:         user,
 		Port:         port,
@@ -56,6 +62,7 @@ func opts() bichme.Opts {
 		UploadPath:   uploadPath,
 		Insecure:     insecure,
 		DownloadPath: outputPath,
+		Tasks:        t,
 	}
 }
 

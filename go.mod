@@ -4,6 +4,7 @@ go 1.25.4
 
 require (
 	github.com/pkg/sftp v1.13.10
+	github.com/skeema/knownhosts v1.3.2
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.46.0
 )

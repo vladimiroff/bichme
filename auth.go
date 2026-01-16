@@ -1,15 +1,15 @@
 package bichme
 
 import (
-	"fmt"
+	"errors"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
 
+	"github.com/skeema/knownhosts"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
-	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 // loadSSHAuth returns SSH auth methods by trying the SSH agent first,
@@ -70,7 +70,6 @@ func loadIdentityFiles() []ssh.Signer {
 		keyPath := filepath.Join(sshDir, name)
 		signer, err := loadPrivateKey(keyPath)
 		if err != nil {
-			slog.Debug("Skip private key", "path", keyPath, "error", err)
 			continue
 		}
 		signers = append(signers, signer)
@@ -88,12 +87,25 @@ func loadPrivateKey(path string) (ssh.Signer, error) {
 	return ssh.ParsePrivateKey(data)
 }
 
-// loadHostKeyCallback returns an SSH host key callback. If insecure is true,
-// it returns a callback that accepts any host key. Otherwise, it reads
-// ~/.ssh/known_hosts and /etc/ssh/ssh_known_hosts for verification.
-func loadHostKeyCallback(insecure bool) (ssh.HostKeyCallback, error) {
+// hostKeyConfig holds the callback and algorithms for SSH host key verification.
+type hostKeyConfig struct {
+	Callback   ssh.HostKeyCallback
+	Algorithms []string
+}
+
+// hostKeyVerifier returns host key configuration for a given host:port.
+// In insecure mode, it returns a noop that accepts any key.
+type hostKeyVerifier func(hostWithPort string) hostKeyConfig
+
+// loadHostKeyVerifier returns a function that provides host key verification
+// config for any host. If insecure is true, returns a noop verifier that
+// accepts any host key. Otherwise, reads ~/.ssh/known_hosts and
+// /etc/ssh/ssh_known_hosts for verification.
+func loadHostKeyVerifier(insecure bool) (hostKeyVerifier, error) {
 	if insecure {
-		return ssh.InsecureIgnoreHostKey(), nil
+		return func(string) hostKeyConfig {
+			return hostKeyConfig{Callback: ssh.InsecureIgnoreHostKey()}
+		}, nil
 	}
 
 	var files []string
@@ -109,8 +121,19 @@ func loadHostKeyCallback(insecure bool) (ssh.HostKeyCallback, error) {
 	}
 
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no ssh known_hosts files found")
+		return nil, errors.New("no ssh known_hosts files found")
 	}
 
-	return knownhosts.New(files...)
+	db, err := knownhosts.NewDB(files...)
+	if err != nil {
+		return nil, err
+	}
+
+	callback := db.HostKeyCallback()
+	return func(hostWithPort string) hostKeyConfig {
+		return hostKeyConfig{
+			Callback:   callback,
+			Algorithms: db.HostKeyAlgorithms(hostWithPort),
+		}
+	}, nil
 }

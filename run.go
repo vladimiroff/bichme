@@ -46,7 +46,7 @@ func writeMetaFile(path, name, content string) error {
 func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	start := time.Now()
 	auths := loadSSHAuth()
-	hostKeyCallback, err := loadHostKeyCallback(opts.Insecure)
+	hostKeyVerifier, err := loadHostKeyVerifier(opts.Insecure)
 	if err != nil {
 		return fmt.Errorf("load host key verification: %w", err)
 	}
@@ -94,18 +94,21 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	jobs := make(map[string]*Job, len(servers))
 	archive := make(map[*Job]error, len(servers))
 	for _, server := range servers {
-		cfg := &ssh.ClientConfig{
-			User:            opts.User,
-			Auth:            auths,
-			HostKeyCallback: hostKeyCallback,
-			Timeout:         opts.ConnTimeout,
-			ClientVersion:   "SSH-2.0-bichme-" + Version(),
-		}
-
+		user := opts.User
 		if strings.Contains(server, "@") {
 			parts := strings.Split(server, "@")
-			cfg.User = parts[0] // TODO: password inside?
+			user = parts[0]
 			server = parts[1]
+		}
+
+		hostKey := hostKeyVerifier(server)
+		cfg := &ssh.ClientConfig{
+			User:              user,
+			Auth:              auths,
+			HostKeyCallback:   hostKey.Callback,
+			HostKeyAlgorithms: hostKey.Algorithms,
+			Timeout:           opts.ConnTimeout,
+			ClientVersion:     "SSH-2.0-bichme-" + Version(),
 		}
 
 		var tasks Tasks

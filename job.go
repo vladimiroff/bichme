@@ -93,9 +93,8 @@ func (j *Job) Start(ctx context.Context) error {
 		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 		if err != nil {
 			slog.Error("Failed to open output file", "host", j.host, "error", err)
-		} else {
-			j.out.SetFile(f)
 		}
+		j.out.SetFile(f)
 	}
 
 	if j.ssh == nil || !sshIsAlive(j.ssh) {

@@ -10,7 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"bichme"
+	"vld.bg/bichme"
 
 	"github.com/spf13/cobra"
 )

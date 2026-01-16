@@ -1,10 +1,11 @@
 package main
 
 import (
-	"bichme/cmd"
 	"context"
 	"os"
 	"os/signal"
+
+	"vld.bg/bichme/cmd"
 )
 
 func main() {

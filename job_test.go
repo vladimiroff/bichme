@@ -490,6 +490,54 @@ func TestJobUpload(t *testing.T) {
 		}
 	})
 
+	t.Run("preserves_permissions", func(t *testing.T) {
+		localDir := t.TempDir()
+		firstFile := filepath.Join(localDir, "main.sh")
+		if err := os.WriteFile(firstFile, []byte(testFileContent), 0640); err != nil {
+			t.Fatal(err)
+		}
+		secondFile := filepath.Join(localDir, "data.txt")
+		if err := os.WriteFile(secondFile, []byte("data"), 0640); err != nil {
+			t.Fatal(err)
+		}
+
+		remoteRoot := t.TempDir()
+		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+
+		j := &Job{
+			host:  "h",
+			tasks: UploadTask,
+			port:  22,
+			files: []string{firstFile, secondFile},
+			path:  "uploads",
+			out:   NewOutput("h"),
+		}
+		defer j.Close()
+		dialAndSFTP(t, j)
+
+		if err := j.Upload(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		firstRemote := filepath.Join(remoteRoot, "uploads", "main.sh")
+		info, err := os.Stat(firstRemote)
+		if err != nil {
+			t.Fatalf("stat first: %v", err)
+		}
+		if info.Mode().Perm() != 0640|0111 {
+			t.Errorf("first file mode = %o, want %o (original | +x)", info.Mode().Perm(), 0751)
+		}
+
+		secondRemote := filepath.Join(remoteRoot, "uploads", "data.txt")
+		info, err = os.Stat(secondRemote)
+		if err != nil {
+			t.Fatalf("stat second: %v", err)
+		}
+		if info.Mode().Perm() != 0640 {
+			t.Errorf("second file mode = %o, want %o", info.Mode().Perm(), 0640)
+		}
+	})
+
 	errCases := []struct {
 		name  string
 		ctx   context.Context
@@ -654,6 +702,90 @@ func TestJobDownload(t *testing.T) {
 		// config.txt should not exist
 		if _, err := os.Stat(filepath.Join(localRoot, "server1", "logs", "config.txt")); err == nil {
 			t.Error("config.txt should not have been downloaded")
+		}
+	})
+
+	t.Run("preserves_file_permissions", func(t *testing.T) {
+		remoteRoot := t.TempDir()
+		localRoot := t.TempDir()
+
+		remoteFile := filepath.Join(remoteRoot, "exec.sh")
+		if err := os.WriteFile(remoteFile, []byte(testFileContent), 0750); err != nil {
+			t.Fatal(err)
+		}
+
+		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+
+		j := &Job{
+			host:  "h",
+			tasks: DownloadTask,
+			port:  22,
+			files: []string{"exec.sh"},
+			path:  localRoot,
+			out:   NewOutput("h"),
+		}
+		defer j.Close()
+		dialAndSFTP(t, j)
+
+		if err := j.Download(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		localPath := filepath.Join(localRoot, "h", "exec.sh")
+		info, err := os.Stat(localPath)
+		if err != nil {
+			t.Fatalf("stat: %v", err)
+		}
+		if info.Mode().Perm() != 0750 {
+			t.Errorf("mode = %o, want %o", info.Mode().Perm(), 0750)
+		}
+	})
+
+	t.Run("preserves_dir_permissions", func(t *testing.T) {
+		remoteRoot := t.TempDir()
+		localRoot := t.TempDir()
+
+		restrictedDir := filepath.Join(remoteRoot, "restricted")
+		if err := os.MkdirAll(restrictedDir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(restrictedDir, "secret.txt"), []byte("secret"), 0600); err != nil {
+			t.Fatal(err)
+		}
+
+		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+
+		j := &Job{
+			host:  "h",
+			tasks: DownloadTask,
+			port:  22,
+			files: []string{"restricted"},
+			path:  localRoot,
+			out:   NewOutput("h"),
+		}
+		defer j.Close()
+		dialAndSFTP(t, j)
+
+		if err := j.Download(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		dirPath := filepath.Join(localRoot, "h", "restricted")
+		info, err := os.Stat(dirPath)
+		if err != nil {
+			t.Fatalf("stat: %v", err)
+		}
+		if info.Mode().Perm() != 0700 {
+			t.Errorf("dir mode = %o, want %o", info.Mode().Perm(), 0700)
+		}
+
+		filePath := filepath.Join(localRoot, "h", "restricted", "secret.txt")
+		fileInfo, err := os.Stat(filePath)
+		if err != nil {
+			t.Fatalf("stat file: %v", err)
+		}
+		if fileInfo.Mode().Perm() != 0600 {
+			t.Errorf("file mode = %o, want %o", fileInfo.Mode().Perm(), 0600)
 		}
 	})
 }

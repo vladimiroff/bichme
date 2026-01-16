@@ -46,6 +46,11 @@ func uploadFile(c *sftp.Client, dir, file string) (err error) {
 	}
 	defer local.Close()
 
+	info, err := local.Stat()
+	if err != nil {
+		return fmt.Errorf("stat %q: %w", file, err)
+	}
+
 	filename := path.Join(dir, filepath.Base(file))
 	tempname := fmt.Sprintf("%s_%s.tmp", filename, randHex(32))
 	temp, err := c.Create(tempname)
@@ -59,8 +64,8 @@ func uploadFile(c *sftp.Client, dir, file string) (err error) {
 		}
 	}()
 
-	if err = c.Chmod(tempname, 0600); err != nil {
-		return fmt.Errorf("chmod 0600 %q: %w", tempname, err)
+	if err = c.Chmod(tempname, info.Mode().Perm()); err != nil {
+		return fmt.Errorf("chmod %q: %w", tempname, err)
 	}
 
 	if _, err = io.Copy(temp, local); err != nil {
@@ -78,14 +83,20 @@ func uploadFile(c *sftp.Client, dir, file string) (err error) {
 	return nil
 }
 
-// makeExec makes a file executable.
+// makeExec adds execute permission to a file.
 func makeExec(ctx context.Context, c *sftp.Client, filename string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	if err := c.Chmod(filename, 0700); err != nil {
-		return fmt.Errorf("chmod 0700 %q: %w", filename, err)
+	info, err := c.Stat(filename)
+	if err != nil {
+		return fmt.Errorf("stat %q: %w", filename, err)
+	}
+
+	mode := info.Mode().Perm() | 0111
+	if err := c.Chmod(filename, mode); err != nil {
+		return fmt.Errorf("chmod +x %q: %w", filename, err)
 	}
 
 	return nil
@@ -186,7 +197,7 @@ func downloadDir(ctx context.Context, c *sftp.Client, localDir, remoteDir string
 
 		if info.IsDir() {
 			localPath := filepath.Join(localDir, remotePath)
-			if err := os.MkdirAll(localPath, 0755); err != nil {
+			if err := os.MkdirAll(localPath, info.Mode().Perm()); err != nil {
 				return fmt.Errorf("create dir %q: %w", localPath, err)
 			}
 		} else {
@@ -236,6 +247,11 @@ func downloadFile(c *sftp.Client, localDir, remotePath string) (err error) {
 	}
 	defer remote.Close()
 
+	info, err := remote.Stat()
+	if err != nil {
+		return fmt.Errorf("stat %q: %w", remotePath, err)
+	}
+
 	dir := filepath.Dir(localPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create dir %q: %w", dir, err)
@@ -253,8 +269,8 @@ func downloadFile(c *sftp.Client, localDir, remotePath string) (err error) {
 		}
 	}()
 
-	if err = os.Chmod(tempname, 0600); err != nil {
-		return fmt.Errorf("chmod 0600 %q: %w", tempname, err)
+	if err = os.Chmod(tempname, info.Mode().Perm()); err != nil {
+		return fmt.Errorf("chmod %q: %w", tempname, err)
 	}
 
 	if _, err = io.Copy(temp, remote); err != nil {

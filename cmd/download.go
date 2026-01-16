@@ -46,7 +46,7 @@ func init() {
 	rootCmd.AddCommand(downloadCmd)
 	downloadCmd.Flags().StringVarP(&user, "user", "u", defaultUser(), "user to login as")
 	downloadCmd.Flags().IntVarP(&port, "port", "p", 22, "SSH port to connect to")
-	downloadCmd.Flags().IntVar(&retries, "retries", 5, "how many retries to perform on failed downloads")
+	downloadCmd.Flags().IntVarP(&retries, "retries", "r", 5, "how many retries to perform on failed downloads")
 	downloadCmd.Flags().IntVarP(&workers, "workers", "w", 10, "how many workers to download in parallel")
 	downloadCmd.Flags().DurationVar(&connectTimeout, "conn-timeout", 30*time.Second, "connection timeout")
 	downloadCmd.Flags().BoolVar(&history, "history", false, "write execution into history")

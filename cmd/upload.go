@@ -62,7 +62,7 @@ func init() {
 	rootCmd.AddCommand(uploadCmd)
 	uploadCmd.Flags().StringVarP(&user, "user", "u", defaultUser(), "user to login as")
 	uploadCmd.Flags().IntVarP(&port, "port", "p", 22, "SSH port to connect to")
-	uploadCmd.Flags().IntVar(&retries, "retries", 5, "how many retries to perform on failed uploads")
+	uploadCmd.Flags().IntVarP(&retries, "retries", "r", 5, "how many retries to perform on failed uploads")
 	uploadCmd.Flags().IntVarP(&workers, "workers", "w", 10, "how many workers to upload in parallel")
 	uploadCmd.Flags().DurationVar(&connectTimeout, "conn-timeout", 30*time.Second, "connection timeout")
 	uploadCmd.Flags().BoolVar(&history, "history", false, "write execution into history")

@@ -37,7 +37,7 @@ func init() {
 	rootCmd.AddCommand(shellCmd)
 	shellCmd.Flags().StringVarP(&user, "user", "u", defaultUser(), "user to login as")
 	shellCmd.Flags().IntVarP(&port, "port", "p", 22, "SSH port to connect to")
-	shellCmd.Flags().IntVar(&retries, "retries", 5, "how many retries to perform on failed executions")
+	shellCmd.Flags().IntVarP(&retries, "retries", "r", 5, "how many retries to perform on failed executions")
 	shellCmd.Flags().IntVarP(&workers, "workers", "w", 10, "how many workers to execute commands in parallel")
 	shellCmd.Flags().DurationVar(&connectTimeout, "conn-timeout", 30*time.Second, "connection timeout")
 	shellCmd.Flags().DurationVarP(&executeTimeout, "exec-timeout", "t", 1*time.Hour, "execution timeout")

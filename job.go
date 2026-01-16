@@ -131,6 +131,17 @@ func (j *Job) Start(ctx context.Context) error {
 			err = fmt.Errorf("%w: %w", ErrFileTransfer, err)
 		}
 	}
+	if j.tasks.Has(CleanupTask) && err == nil {
+		if j.sftp == nil || !sftpIsAlive(j.sftp) {
+			j.sftp, err = sftp.NewClient(j.ssh)
+			if err != nil {
+				return fmt.Errorf("%w: open sftp session: %w", ErrFileTransfer, err)
+			}
+		}
+		if err = j.Cleanup(ctx); err != nil {
+			return fmt.Errorf("%w: %w", ErrFileTransfer, err)
+		}
+	}
 
 	return err
 }
@@ -158,6 +169,22 @@ func (j *Job) Download(ctx context.Context) error {
 		return fmt.Errorf("download: %w", err)
 	}
 	return nil
+}
+
+// Cleanup removes uploaded files from the remote host.
+func (j *Job) Cleanup(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	var err error
+	for _, file := range j.files {
+		filename := filepath.Join(j.path, filepath.Base(file))
+		if rerr := j.sftp.Remove(filename); rerr != nil {
+			err = errors.Join(err, fmt.Errorf("remove %q: %w", filename, rerr))
+		}
+	}
+	return err
 }
 
 // just to be able to override it in tests

@@ -36,6 +36,7 @@ var (
 	workers  int
 	files    []string
 	insecure bool
+	cleanup  bool
 
 	connectTimeout time.Duration
 	executeTimeout time.Duration
@@ -43,10 +44,14 @@ var (
 
 // opts populates cli args into bichme.Opts. It takes Tasks as an argument as
 // the command is supposed to know what tasks is to perform. On top of the
-// given t it toggles history which is resolved by --history.
+// given t it toggles history which is resolved by --history and cleanup which
+// is resolved by --cleanup.
 func opts(t bichme.Tasks) bichme.Opts {
 	if history {
 		t.Set(bichme.KeepHistoryTask)
+	}
+	if cleanup {
+		t.Set(bichme.CleanupTask)
 	}
 
 	return bichme.Opts{

@@ -59,4 +59,5 @@ func init() {
 	execCmd.Flags().DurationVarP(&executeTimeout, "exec-timeout", "t", 1*time.Hour, "execution timeout")
 	execCmd.Flags().BoolVar(&history, "history", true, "write execution into history")
 	execCmd.Flags().BoolVarP(&insecure, "insecure", "i", false, "skip host key verification")
+	execCmd.Flags().BoolVarP(&cleanup, "cleanup", "c", false, "delete uploaded files after successful execution")
 }

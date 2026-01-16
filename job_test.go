@@ -232,6 +232,40 @@ func TestJobStart(t *testing.T) {
 			},
 			err: ErrFileTransfer,
 		},
+		{
+			name: "cleanup_sftp_fail",
+			setup: func(t *testing.T) *Job {
+				localFile := writeTestFile(t, "s.sh", testFileContent)
+				sshDialHandlerMock(t, compositeHandler(rejectSFTPHandler(), execRequestHandler("", 0)))
+				return &Job{
+					host:        "h",
+					tasks:       ExecTask | CleanupTask, // no UploadTask, so sftp not opened
+					port:        22,
+					execTimeout: time.Second,
+					files:       []string{localFile},
+					path:        "w",
+				}
+			},
+			err: ErrFileTransfer,
+		},
+		{
+			name: "cleanup_fail",
+			setup: func(t *testing.T) *Job {
+				localFile := writeTestFile(t, "s.sh", testFileContent)
+				remoteRoot := t.TempDir()
+				sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot), execRequestHandler("", 0)))
+				return &Job{
+					host:        "h",
+					tasks:       ExecTask | CleanupTask,
+					port:        22,
+					execTimeout: time.Second,
+					maxRetries:  1,
+					files:       []string{localFile},
+					path:        "w", // file doesn't exist, cleanup will fail
+				}
+			},
+			err: ErrFileTransfer,
+		},
 	}
 
 	for _, tc := range errCases {
@@ -620,6 +654,230 @@ func TestJobDownload(t *testing.T) {
 		// config.txt should not exist
 		if _, err := os.Stat(filepath.Join(localRoot, "server1", "logs", "config.txt")); err == nil {
 			t.Error("config.txt should not have been downloaded")
+		}
+	})
+}
+
+func TestJobCleanup(t *testing.T) {
+	t.Run("ok", func(t *testing.T) {
+		localFile := writeTestFile(t, "script.sh", testFileContent)
+		remoteRoot := t.TempDir()
+		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+
+		j := &Job{
+			host:  "h",
+			tasks: CleanupTask,
+			port:  22,
+			files: []string{localFile},
+			path:  "uploads",
+			out:   NewOutput("h"),
+		}
+		defer j.Close()
+		dialAndSFTP(t, j)
+
+		// First upload the file
+		if err := j.Upload(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify file exists
+		remotePath := filepath.Join(remoteRoot, "uploads", "script.sh")
+		if _, err := os.Stat(remotePath); err != nil {
+			t.Fatalf("file should exist before cleanup: %v", err)
+		}
+
+		// Now cleanup
+		if err := j.Cleanup(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify file is removed
+		if _, err := os.Stat(remotePath); !os.IsNotExist(err) {
+			t.Error("file should be removed after cleanup")
+		}
+	})
+
+	t.Run("multiple_files", func(t *testing.T) {
+		localDir := t.TempDir()
+		files := []string{
+			writeTestFile(t, localDir+"/a.sh", "a"),
+			writeTestFile(t, localDir+"/b.txt", "b"),
+		}
+		remoteRoot := t.TempDir()
+		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+
+		j := &Job{
+			host:  "h",
+			tasks: CleanupTask,
+			port:  22,
+			files: files,
+			path:  "up",
+			out:   NewOutput("h"),
+		}
+		defer j.Close()
+		dialAndSFTP(t, j)
+
+		// Upload files first
+		if err := j.Upload(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		// Cleanup
+		if err := j.Cleanup(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify all files are removed
+		for _, f := range files {
+			remotePath := filepath.Join(remoteRoot, "up", filepath.Base(f))
+			if _, err := os.Stat(remotePath); !os.IsNotExist(err) {
+				t.Errorf("file %s should be removed", filepath.Base(f))
+			}
+		}
+	})
+
+	t.Run("cancelled", func(t *testing.T) {
+		j := &Job{
+			host:  "h",
+			tasks: CleanupTask,
+			port:  22,
+			files: []string{"/any"},
+			path:  "up",
+			out:   NewOutput("h"),
+		}
+		defer j.Close()
+
+		err := j.Cleanup(cancelledCtx())
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("expected context.Canceled, got %v", err)
+		}
+	})
+
+	t.Run("bad_remove", func(t *testing.T) {
+		remoteRoot := t.TempDir()
+		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+
+		j := &Job{
+			host:  "h",
+			tasks: CleanupTask,
+			port:  22,
+			files: []string{"/nonexistent.sh"},
+			path:  "up",
+			out:   NewOutput("h"),
+		}
+		defer j.Close()
+		dialAndSFTP(t, j)
+
+		err := j.Cleanup(ctx)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+func TestJobStartWithCleanup(t *testing.T) {
+	discardStdout(t)
+
+	t.Run("upload_exec_cleanup", func(t *testing.T) {
+		localFile := writeTestFile(t, "run.sh", testFileContent)
+		remoteRoot := t.TempDir()
+		sshDialHandlerMock(t, compositeHandler(
+			sftpSubsystemHandler(remoteRoot),
+			execRequestHandler("done", 0),
+		))
+
+		j := &Job{
+			host:        "h",
+			tasks:       UploadTask | ExecTask | CleanupTask,
+			port:        22,
+			execTimeout: time.Second,
+			files:       []string{localFile},
+			path:        "work",
+		}
+		defer j.Close()
+
+		if err := j.Start(ctx); err != nil {
+			t.Error(err)
+		}
+		if !j.tasks.Done() {
+			t.Error("tasks not done")
+		}
+
+		// Verify file was cleaned up
+		remotePath := filepath.Join(remoteRoot, "work", "run.sh")
+		if _, err := os.Stat(remotePath); !os.IsNotExist(err) {
+			t.Error("file should be removed after cleanup")
+		}
+	})
+
+	t.Run("cleanup_skipped_on_exec_failure", func(t *testing.T) {
+		localFile := writeTestFile(t, "run.sh", testFileContent)
+		remoteRoot := t.TempDir()
+		sshDialHandlerMock(t, compositeHandler(
+			sftpSubsystemHandler(remoteRoot),
+			execRequestHandler("failed", 1), // non-zero exit
+		))
+
+		j := &Job{
+			host:        "h",
+			tasks:       UploadTask | ExecTask | CleanupTask,
+			port:        22,
+			execTimeout: time.Second,
+			maxRetries:  1,
+			files:       []string{localFile},
+			path:        "work",
+		}
+		defer j.Close()
+
+		err := j.Start(ctx)
+		if err == nil {
+			t.Error("expected error from failed exec")
+		}
+
+		// Verify file was NOT cleaned up (cleanup should be skipped on error)
+		remotePath := filepath.Join(remoteRoot, "work", "run.sh")
+		if _, err := os.Stat(remotePath); err != nil {
+			t.Errorf("file should still exist after failed exec: %v", err)
+		}
+	})
+
+	t.Run("cleanup_without_upload", func(t *testing.T) {
+		// Test that cleanup works even when sftp wasn't opened for upload
+		localFile := writeTestFile(t, "run.sh", testFileContent)
+		remoteRoot := t.TempDir()
+
+		// Pre-create the file on "remote" to simulate it already existing
+		uploadDir := filepath.Join(remoteRoot, "work")
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		remoteFile := filepath.Join(uploadDir, "run.sh")
+		if err := os.WriteFile(remoteFile, []byte(testFileContent), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		sshDialHandlerMock(t, compositeHandler(
+			sftpSubsystemHandler(remoteRoot),
+			execRequestHandler("done", 0),
+		))
+
+		j := &Job{
+			host:        "h",
+			tasks:       ExecTask | CleanupTask, // No UploadTask
+			port:        22,
+			execTimeout: time.Second,
+			files:       []string{localFile},
+			path:        "work",
+		}
+		defer j.Close()
+
+		if err := j.Start(ctx); err != nil {
+			t.Error(err)
+		}
+
+		// Verify file was cleaned up
+		if _, err := os.Stat(remoteFile); !os.IsNotExist(err) {
+			t.Error("file should be removed after cleanup")
 		}
 	})
 }

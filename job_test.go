@@ -524,6 +524,54 @@ func TestJobUpload(t *testing.T) {
 		if err != nil {
 			t.Fatalf("stat first: %v", err)
 		}
+		if info.Mode().Perm() != 0640 {
+			t.Errorf("first file mode = %o, want %o", info.Mode().Perm(), 0640)
+		}
+
+		secondRemote := filepath.Join(remoteRoot, "uploads", "data.txt")
+		info, err = os.Stat(secondRemote)
+		if err != nil {
+			t.Fatalf("stat second: %v", err)
+		}
+		if info.Mode().Perm() != 0640 {
+			t.Errorf("second file mode = %o, want %o", info.Mode().Perm(), 0640)
+		}
+	})
+
+	t.Run("makes_first_file_executable_when_exec_task_set", func(t *testing.T) {
+		localDir := t.TempDir()
+		firstFile := filepath.Join(localDir, "main.sh")
+		if err := os.WriteFile(firstFile, []byte(testFileContent), 0640); err != nil {
+			t.Fatal(err)
+		}
+		secondFile := filepath.Join(localDir, "data.txt")
+		if err := os.WriteFile(secondFile, []byte("data"), 0640); err != nil {
+			t.Fatal(err)
+		}
+
+		remoteRoot := t.TempDir()
+		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+
+		j := &Job{
+			host:  "h",
+			tasks: UploadTask | ExecTask,
+			port:  22,
+			files: []string{firstFile, secondFile},
+			path:  "uploads",
+			out:   NewOutput("h"),
+		}
+		defer j.Close()
+		dialAndSFTP(t, j)
+
+		if err := j.Upload(ctx); err != nil {
+			t.Fatal(err)
+		}
+
+		firstRemote := filepath.Join(remoteRoot, "uploads", "main.sh")
+		info, err := os.Stat(firstRemote)
+		if err != nil {
+			t.Fatalf("stat first: %v", err)
+		}
 		if info.Mode().Perm() != 0640|0111 {
 			t.Errorf("first file mode = %o, want %o (original | +x)", info.Mode().Perm(), 0751)
 		}

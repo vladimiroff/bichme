@@ -151,7 +151,7 @@ func (j *Job) Upload(ctx context.Context) error {
 		return fmt.Errorf("upload: %w", err)
 	}
 
-	if len(j.files) > 0 {
+	if len(j.files) > 0 && j.tasks.Has(ExecTask) {
 		filename := filepath.Join(j.path, filepath.Base(j.files[0]))
 		if err := makeExec(ctx, j.sftp, filename); err != nil {
 			return fmt.Errorf("make exec: %w", err)

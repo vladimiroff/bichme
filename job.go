@@ -163,8 +163,26 @@ func (j *Job) Upload(ctx context.Context) error {
 
 // Download files from the remote host to local directory.
 func (j *Job) Download(ctx context.Context) error {
+	// Filter out patterns with no matches, logging errors for each
+	var matched []string
+	for _, pattern := range j.files {
+		matches, err := j.sftp.Glob(pattern)
+		if err != nil {
+			return fmt.Errorf("download: glob %q: %w", pattern, err)
+		}
+		if len(matches) == 0 {
+			fmt.Fprintf(j.out, "download: glob %q: no such file or directory\n", pattern)
+			continue
+		}
+		matched = append(matched, pattern)
+	}
+
+	if len(matched) == 0 {
+		return nil
+	}
+
 	localDir := filepath.Join(j.path, j.hostname())
-	if err := download(ctx, j.sftp, localDir, j.files...); err != nil {
+	if err := download(ctx, j.sftp, localDir, matched...); err != nil {
 		return fmt.Errorf("download: %w", err)
 	}
 	return nil

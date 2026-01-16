@@ -1,10 +1,12 @@
 package bichme
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -591,11 +593,10 @@ func TestJobUpload(t *testing.T) {
 		ctx   context.Context
 		setup func(t *testing.T, j *Job)
 	}{
-		{"cancelled", cancelledCtx(), nil},
-		{"missing_file", nil, func(t *testing.T, j *Job) {
+		{"cancelled", cancelledCtx(), func(t *testing.T, j *Job) {
 			remoteRoot := t.TempDir()
 			sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
-			j.files = []string{"/nonexistent"}
+			j.files = []string{writeTestFile(t, "s.sh", testFileContent)}
 			dialAndSFTP(t, j)
 		}},
 		{"mkdir_fail", nil, func(t *testing.T, j *Job) {
@@ -834,6 +835,36 @@ func TestJobDownload(t *testing.T) {
 		}
 		if fileInfo.Mode().Perm() != 0600 {
 			t.Errorf("file mode = %o, want %o", fileInfo.Mode().Perm(), 0600)
+		}
+	})
+
+	t.Run("no_matches_logs_error", func(t *testing.T) {
+		remoteRoot := t.TempDir()
+		localRoot := t.TempDir()
+
+		sshDialHandlerMock(t, compositeHandler(sftpSubsystemHandler(remoteRoot)))
+
+		var buf bytes.Buffer
+		out := NewOutput("h")
+		out.SetStdout(&buf)
+
+		j := &Job{
+			host:  "h",
+			tasks: DownloadTask,
+			port:  22,
+			files: []string{"nonexistent"},
+			path:  localRoot,
+			out:   out,
+		}
+		defer j.Close()
+		dialAndSFTP(t, j)
+
+		if err := j.Download(ctx); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(buf.String(), "no such file") {
+			t.Errorf("expected 'no such file' in output, got: %q", buf.String())
 		}
 	})
 }

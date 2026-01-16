@@ -3,6 +3,8 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"bichme"
@@ -36,7 +38,22 @@ Examples:
 		if err != nil {
 			return fmt.Errorf("read servers: %w", err)
 		}
-		files = args[1:] // local patterns to upload
+
+		for _, pattern := range args[1:] {
+			matches, err := filepath.Glob(pattern)
+			if err != nil {
+				return fmt.Errorf("invalid pattern %q: %w", pattern, err)
+			}
+			if len(matches) == 0 {
+				fmt.Fprintf(os.Stderr, "upload: %s: no such file or directory\n", pattern)
+				continue
+			}
+			files = append(files, matches...)
+		}
+		if len(files) == 0 {
+			die("No existing files to upload")
+		}
+
 		return bichme.Run(cmd.Context(), hosts, "", opts(bichme.UploadTask))
 	},
 }

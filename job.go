@@ -116,7 +116,7 @@ func (j *Job) Start(ctx context.Context) error {
 	}
 	if j.tasks.Has(ExecTask) {
 		if err = j.Exec(ctx); err != nil {
-			err = fmt.Errorf("%w: %w", ErrExecution, err)
+			return fmt.Errorf("%w: %w", ErrExecution, err)
 		}
 	}
 	if j.tasks.Has(DownloadTask) {
@@ -127,7 +127,7 @@ func (j *Job) Start(ctx context.Context) error {
 			}
 		}
 		if err = j.Download(ctx); err != nil {
-			err = fmt.Errorf("%w: %w", ErrFileTransfer, err)
+			return fmt.Errorf("%w: %w", ErrFileTransfer, err)
 		}
 	}
 	if j.tasks.Has(CleanupTask) && err == nil {

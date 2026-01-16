@@ -16,7 +16,20 @@ import (
 var execCmd = &cobra.Command{
 	Use:   "exec <servers> <file>",
 	Short: "Execute given executable on multiple machines",
-	Args:  cobra.ExactArgs(2),
+	Long: `Upload and execute a file on multiple machines in parallel.
+
+The file is transferred via SFTP to each host and then executed. Additional
+files can be uploaded alongside the main executable using the -f flag.
+
+By default, uploaded files remain on the remote hosts after execution.
+Use --cleanup to delete them after successful execution.
+
+Examples:
+  bichme exec servers.txt ./deploy.sh
+  bichme exec servers.txt ./install.sh -f config.yaml -f data.json
+  bichme exec servers.txt ./script.sh --cleanup
+  bichme exec servers.txt ./backup.sh -t 4h -w 5`,
+	Args: cobra.ExactArgs(2),
 	PreRunE: func(_ *cobra.Command, _ []string) error {
 		return errors.Join(
 			minLen("user", user, 1),

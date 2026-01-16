@@ -19,6 +19,15 @@ import (
 var historyCmd = &cobra.Command{
 	Use:   "history",
 	Short: "List previous executions and their result",
+	Long: `List previous executions and their results.
+
+Displays a table of recorded executions with ID, start time, duration,
+number of hosts, number of files, and the command that was run.
+
+Use 'history show <id>' to view the full output of a specific execution.
+Use 'history purge' to clean up old history entries.
+
+The history location can be changed with --history-path.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		items, err := bichme.ListHistory(historyPath)
 		if err != nil {
@@ -38,8 +47,17 @@ var historyCmd = &cobra.Command{
 
 // historyInspectCmd provides full data for given execution.
 var historyInspectCmd = &cobra.Command{
-	Use:   "show",
+	Use:   "show [id...]",
 	Short: "Show all the details of specific execution",
+	Long: `Show the full output and details of one or more previous executions.
+
+The ID corresponds to the number shown in 'bichme history' output.
+If no ID is provided, shows the most recent execution (ID 1).
+
+Examples:
+  bichme history show        # show most recent
+  bichme history show 1      # show execution #1
+  bichme history show 1 2 3  # show multiple executions`,
 	PreRunE: func(_ *cobra.Command, args []string) error {
 		for i, arg := range args {
 			if _, err := strconv.Atoi(arg); err != nil {
@@ -80,6 +98,15 @@ var (
 var historyPurgeCmd = &cobra.Command{
 	Use:   "purge",
 	Short: "Purge previous executions",
+	Long: `Delete old execution history entries.
+
+Exactly one of --keep, --older-than, or --all must be specified.
+
+Examples:
+  bichme history purge --keep 10         # keep only the 10 most recent
+  bichme history purge --older-than 24h  # delete entries older than 24 hours
+  bichme history purge --older-than 7d   # delete entries older than 7 days
+  bichme history purge --all             # delete all history`,
 	PreRunE: func(_ *cobra.Command, args []string) error {
 		if purgeOlderThan == 0 && purgeKeep == 0 && !purgeAll {
 			return errBadPurgeVars

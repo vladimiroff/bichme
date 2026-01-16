@@ -104,12 +104,25 @@ var rootCmd = &cobra.Command{
 	Use:     "bichme",
 	Short:   "Utility for quick and dirty execution on multiple machines at once",
 	Version: bichme.Version(),
+	Long: `bichme - parallel SSH command execution across multiple servers.
+
+Connect to multiple hosts via SSH, execute commands or upload scripts,
+and aggregate output with per-host prefixes. A lightweight alternative
+to Ansible for ad-hoc operations.
+
+Features:
+  - Parallel SSH connections with configurable worker pool
+  - File download via SFTP
+  - File upload via SFTP before execution
+  - Automatic retry on failures
+  - Execution history with logs
+
+Authentication is handled via ssh-agent and all the unencrypted SSH keys in '~/.ssh'.`,
 	PersistentPreRun: func(_ *cobra.Command, _ []string) {
 		if verbose {
 			slog.SetLogLoggerLevel(slog.LevelDebug)
 		}
 	},
-	// Long:  "", // TODO
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

@@ -15,7 +15,20 @@ import (
 var shellCmd = &cobra.Command{
 	Use:   "shell <servers> <command>",
 	Short: "Run a single command on multiple machines",
-	Args:  cobra.MinimumNArgs(2),
+	Long: `Run a shell command on multiple machines in parallel.
+
+The servers file should contain one host per line. Empty lines and lines
+starting with # are ignored. Hosts can include a port suffix (host:port).
+
+Commands with pipes, redirects, or special characters should be quoted.
+
+Examples:
+  bichme shell servers.txt uptime
+  bichme shell servers.txt df -h /
+  bichme shell servers.txt 'systemctl status nginx | head -5'
+  bichme shell servers.txt 'grep ERROR /var/log/app.log' -w 50
+  bichme shell servers.txt 'systemctl restart myapp' -w 1 -t 30s`,
+	Args: cobra.MinimumNArgs(2),
 	PreRunE: func(_ *cobra.Command, _ []string) error {
 		return errors.Join(
 			minLen("user", user, 1),

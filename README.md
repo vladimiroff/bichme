@@ -110,6 +110,22 @@ bichme download servers.txt /var/log/*.log -o ~/logs
 bichme download servers.txt '/etc/nginx/*.conf'
 ```
 
+### ping
+
+Test SSH connectivity to multiple machines without executing any commands.
+
+```sh
+bichme ping <servers-file> [flags]
+```
+
+Example:
+
+```sh
+bichme ping servers.txt
+bichme ping servers.txt -w 50
+bichme ping servers.txt --conn-timeout 5s
+```
+
 ### history
 
 View and manage execution history.

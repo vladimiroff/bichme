@@ -9,6 +9,7 @@ const (
 	DownloadTask
 	UploadTask
 	CleanupTask
+	PingTask
 )
 
 // Has reports whether flag is set in t.

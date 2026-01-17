@@ -130,6 +130,9 @@ func (j *Job) Start(ctx context.Context) error {
 			return fmt.Errorf("%w: %w", ErrFileTransfer, err)
 		}
 	}
+	if j.tasks.Has(PingTask) {
+		fmt.Fprintln(j.out, "ok")
+	}
 	if j.tasks.Has(CleanupTask) && err == nil {
 		if j.sftp == nil || !sftpIsAlive(j.sftp) {
 			j.sftp, err = sftp.NewClient(j.ssh)

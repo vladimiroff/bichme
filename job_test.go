@@ -76,6 +76,22 @@ func TestJobStart(t *testing.T) {
 		}
 	})
 
+	t.Run("ping", func(t *testing.T) {
+		sshDialHandlerMock(t, hardcodedOutputHandler("", 0))
+		j := &Job{host: "h", tasks: PingTask, port: 22}
+		defer j.Close()
+
+		if err := j.Start(ctx); err != nil {
+			t.Error(err)
+		}
+		if j.tries != 1 {
+			t.Errorf("tries = %d, want 1", j.tries)
+		}
+		if !j.tasks.Done() {
+			t.Error("tasks not done")
+		}
+	})
+
 	t.Run("with_history", func(t *testing.T) {
 		dir := t.TempDir()
 		sshDialHandlerMock(t, hardcodedOutputHandler("", 0))

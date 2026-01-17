@@ -118,6 +118,7 @@ func (j *Job) Start(ctx context.Context) error {
 		if err = j.Exec(ctx); err != nil {
 			return fmt.Errorf("%w: %w", ErrExecution, err)
 		}
+		j.tasks.Unset(ExecTask)
 	}
 	if j.tasks.Has(DownloadTask) {
 		if j.sftp == nil || !sftpIsAlive(j.sftp) {
@@ -129,9 +130,11 @@ func (j *Job) Start(ctx context.Context) error {
 		if err = j.Download(ctx); err != nil {
 			return fmt.Errorf("%w: %w", ErrFileTransfer, err)
 		}
+		j.tasks.Unset(DownloadTask)
 	}
 	if j.tasks.Has(PingTask) {
 		fmt.Fprintln(j.out, "ok")
+		j.tasks.Unset(PingTask)
 	}
 	if j.tasks.Has(CleanupTask) && err == nil {
 		if j.sftp == nil || !sftpIsAlive(j.sftp) {
@@ -143,6 +146,7 @@ func (j *Job) Start(ctx context.Context) error {
 		if err = j.Cleanup(ctx); err != nil {
 			return fmt.Errorf("%w: %w", ErrFileTransfer, err)
 		}
+		j.tasks.Unset(CleanupTask)
 	}
 
 	return err

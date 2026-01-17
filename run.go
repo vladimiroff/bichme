@@ -152,10 +152,10 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		case <-ctx.Done():
 			go once.Do(finish)
 		case <-SIGUSR1:
-			WriteStats(os.Stdout, archive)
+			WriteStats(os.Stderr, archive)
 		case res, ok := <-resCh:
 			if !ok {
-				WriteStats(os.Stdout, archive)
+				WriteStats(os.Stderr, archive)
 				return nil
 			}
 

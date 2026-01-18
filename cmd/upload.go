@@ -65,7 +65,7 @@ func init() {
 	uploadCmd.Flags().IntVarP(&retries, "retries", "r", 5, "how many retries to perform on failed uploads")
 	uploadCmd.Flags().IntVarP(&workers, "workers", "w", 10, "how many workers to upload in parallel")
 	uploadCmd.Flags().DurationVar(&connectTimeout, "conn-timeout", 30*time.Second, "connection timeout")
-	uploadCmd.Flags().BoolVar(&history, "history", false, "write execution into history")
+	uploadCmd.Flags().BoolVar(&history, "history", true, "write execution into history")
 	uploadCmd.Flags().BoolVarP(&insecure, "insecure", "i", false, "skip host key verification")
 	uploadCmd.Flags().StringVarP(&uploadPath, "output", "o", defaultUploadPath, "remote directory to upload files to")
 }

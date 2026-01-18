@@ -49,7 +49,7 @@ func init() {
 	downloadCmd.Flags().IntVarP(&retries, "retries", "r", 5, "how many retries to perform on failed downloads")
 	downloadCmd.Flags().IntVarP(&workers, "workers", "w", 10, "how many workers to download in parallel")
 	downloadCmd.Flags().DurationVar(&connectTimeout, "conn-timeout", 30*time.Second, "connection timeout")
-	downloadCmd.Flags().BoolVar(&history, "history", false, "write execution into history")
+	downloadCmd.Flags().BoolVar(&history, "history", true, "write execution into history")
 	downloadCmd.Flags().BoolVarP(&insecure, "insecure", "i", false, "skip host key verification")
 	downloadCmd.Flags().StringVarP(&outputPath, "output", "o", defaultOutputPath, "local directory to download files to")
 }

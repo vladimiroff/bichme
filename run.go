@@ -2,6 +2,8 @@ package bichme
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,6 +16,13 @@ import (
 
 	"golang.org/x/crypto/ssh"
 )
+
+// HostResult captures the final execution state for a single host.
+type HostResult struct {
+	Error    string        `json:"error,omitempty"`
+	Tries    int           `json:"tries"`
+	Duration time.Duration `json:"duration"`
+}
 
 var id = runID()
 
@@ -44,6 +53,32 @@ func writeMetaFile(path, name, content string) error {
 	return os.WriteFile(filepath.Join(path, name), []byte(content), 0644)
 }
 
+func writeHostsJSON(path string, archive map[*Job]error) error {
+	results := make(map[string]HostResult, len(archive))
+	for job, err := range archive {
+		result := HostResult{
+			Tries:    job.tries,
+			Duration: job.duration,
+		}
+		if err != nil {
+			switch {
+			case errors.Is(err, ErrConnection):
+				result.Error = "connection"
+			case errors.Is(err, ErrFileTransfer):
+				result.Error = "transfer"
+			case errors.Is(err, ErrExecution):
+				result.Error = "execution"
+			default:
+				result.Error = "unknown"
+			}
+		}
+		results[job.hostname()] = result
+	}
+
+	data, _ := json.MarshalIndent(results, "", "  ")
+	return writeMetaFile(path, "hosts.json", string(data))
+}
+
 func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	start := time.Now()
 	auths := loadSSHAuth()
@@ -66,6 +101,9 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		}()
 	}
 
+	jobs := make(map[string]*Job, len(servers))
+	archive := make(map[*Job]error, len(servers))
+
 	if opts.History {
 		path := filepath.Join(opts.HistoryPath, id)
 		if err := os.MkdirAll(path, 0700); err != nil {
@@ -75,9 +113,6 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		if err := writeMetaFile(path, "command", cmd); err != nil {
 			slog.Error("failed to write command", "error", err)
 		}
-		if err := writeMetaFile(path, "hosts", strings.Join(servers, "\n")); err != nil {
-			slog.Error("failed to write hosts", "error", err)
-		}
 		if err := writeMetaFile(path, "files", strings.Join(opts.Files, "\n")); err != nil {
 			slog.Error("failed to write files", "error", err)
 		}
@@ -86,14 +121,14 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		}
 		defer func(start time.Time) {
 			if err := writeMetaFile(path, "duration", time.Since(start).String()); err != nil {
-				slog.Error("failed to write files", "error", err)
+				slog.Error("failed to write duration", "error", err)
+			}
+			if err := writeHostsJSON(path, archive); err != nil {
+				slog.Error("failed to write hosts.json", "error", err)
 			}
 		}(start)
 		opts.HistoryPath = path
 	}
-
-	jobs := make(map[string]*Job, len(servers))
-	archive := make(map[*Job]error, len(servers))
 	for _, server := range servers {
 		user := opts.User
 		if strings.Contains(server, "@") {

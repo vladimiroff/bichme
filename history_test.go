@@ -17,20 +17,28 @@ func TestHistoryItemWriteTo(t *testing.T) {
 		item HistoryItem
 		want []string
 	}{
-		{"empty", HistoryItem{}, []string{"Start Time:", "Duration:", "Command:", "Files:", "Hosts:", "Logs:"}},
+		{"empty", HistoryItem{}, []string{"Start Time:", "Duration:", "Command:", "Files:", "Succeeded", "Failed", "Logs:"}},
 		{"full", HistoryItem{
 			Path:     "/some/path",
 			Time:     time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
 			Duration: 5 * time.Minute,
-			Hosts:    []string{"host1", "host2"},
-			Files:    []string{"file1.sh", "file2.sh"},
-			Logs:     []string{"/path/to/log1.log", "/path/to/log2.log"},
-			Command:  "uptime",
+			Hosts: map[string]HostResult{
+				"host1": {Tries: 1, Duration: 10 * time.Second},
+				"host2": {Error: "connection", Tries: 3, Duration: 30 * time.Second},
+			},
+			Files:   []string{"file1.sh", "file2.sh"},
+			Logs:    []string{"/path/to/log1.log", "/path/to/log2.log"},
+			Command: "uptime",
 		}, []string{
 			"Start Time:\t2025-01-15 10:30:00 +0000 UTC",
 			"Duration:\t5m0s",
 			"Command:\tuptime",
-			"file1.sh", "file2.sh", "host1", "host2", "log1.log", "log2.log",
+			"Files:",
+			"file1.sh", "file2.sh", "log1.log", "log2.log",
+			"Succeeded (1):",
+			"host1:\t1 tries in 10s",
+			"Failed (1):",
+			"host2:\tConnection Failed in 30s",
 		}},
 	}
 
@@ -47,6 +55,7 @@ func TestHistoryItemWriteTo(t *testing.T) {
 			for _, want := range tc.want {
 				if !strings.Contains(buf.String(), want) {
 					t.Errorf("missing %q in output", want)
+					t.Logf("output:\n%s", buf.String())
 				}
 			}
 		})
@@ -66,7 +75,11 @@ func TestHistoryItemRead(t *testing.T) {
 	item := HistoryItem{
 		Time:    time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
 		Command: "some-long-command-that-requires-space",
-		Hosts:   []string{"host1", "host2", "host3"},
+		Hosts: map[string]HostResult{
+			"host1": {Tries: 1},
+			"host2": {Tries: 1},
+			"host3": {Tries: 1},
+		},
 	}
 
 	for _, tc := range tt {
@@ -121,7 +134,10 @@ func TestListHistory(t *testing.T) {
 		writeTestFile(t, filepath.Join(entry, "start"), "2025-01-15T10:30:00Z")
 		writeTestFile(t, filepath.Join(entry, "command"), "uptime")
 		writeTestFile(t, filepath.Join(entry, "duration"), "5m0s")
-		writeTestFile(t, filepath.Join(entry, "hosts"), "host1:22\nhost2:22")
+		writeTestFile(t, filepath.Join(entry, "hosts.json"), `{
+			"host1": {"tries": 1},
+			"host2": {"error": "connection", "tries": 3}
+		}`)
 		writeTestFile(t, filepath.Join(entry, "files"), "script.sh\ndata.txt")
 		writeTestFile(t, filepath.Join(entry, "host1.log"), "output")
 		writeTestFile(t, filepath.Join(entry, "host2.log"), "output")
@@ -138,8 +154,14 @@ func TestListHistory(t *testing.T) {
 		if item.Duration != 5*time.Minute {
 			t.Errorf("duration = %v, want 5m0s", item.Duration)
 		}
-		if !slices.Equal(item.Hosts, []string{"host1", "host2"}) {
-			t.Errorf("hosts = %v", item.Hosts)
+		if len(item.Hosts) != 2 {
+			t.Errorf("hosts count = %d, want 2", len(item.Hosts))
+		}
+		if r, ok := item.Hosts["host1"]; !ok || r.Error != "" {
+			t.Errorf("host1 result = %v", r)
+		}
+		if r, ok := item.Hosts["host2"]; !ok || r.Error != "connection" || r.Tries != 3 {
+			t.Errorf("host2 result = %v", r)
 		}
 		if !slices.Equal(item.Files, []string{"script.sh", "data.txt"}) {
 			t.Errorf("files = %v", item.Files)
@@ -267,7 +289,7 @@ func TestListHistory(t *testing.T) {
 		}
 	})
 
-	for _, f := range []string{"start", "command", "files", "hosts", "duration"} {
+	for _, f := range []string{"start", "command", "files", "hosts.json", "duration"} {
 		t.Run("unreadable_"+f, func(t *testing.T) {
 			dir := t.TempDir()
 			entry := makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
@@ -325,5 +347,85 @@ func TestEntryName(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestWriteHostsJSON(t *testing.T) {
+	root := t.TempDir()
+	entry := makeHistoryEntry(t, root, "2025-01-15", "10-30-00")
+
+	archive := map[*Job]error{
+		{host: "host1.example.com", tries: 1, duration: 10 * time.Second}: nil,
+		{host: "host2.example.com", tries: 3, duration: 30 * time.Second}: ErrConnection,
+		{host: "host3.example.com", tries: 2, duration: 20 * time.Second}: ErrFileTransfer,
+		{host: "host4.example.com", tries: 1, duration: 5 * time.Second}:  ErrExecution,
+	}
+
+	if err := writeHostsJSON(entry, archive); err != nil {
+		t.Fatalf("writeHostsJSON: %v", err)
+	}
+
+	// Read and parse the written file
+	items, err := ListHistory(root)
+	if err != nil {
+		t.Fatalf("ListHistory: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+
+	hosts := items[0].Hosts
+	if len(hosts) != 4 {
+		t.Fatalf("got %d hosts, want 4", len(hosts))
+	}
+
+	tests := []struct {
+		host     string
+		err      string
+		tries    int
+		duration time.Duration
+	}{
+		{"host1.example.com", "", 1, 10 * time.Second},
+		{"host2.example.com", "connection", 3, 30 * time.Second},
+		{"host3.example.com", "transfer", 2, 20 * time.Second},
+		{"host4.example.com", "execution", 1, 5 * time.Second},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.host, func(t *testing.T) {
+			r, ok := hosts[tc.host]
+			if !ok {
+				t.Fatalf("host %q not found", tc.host)
+			}
+			if r.Error != tc.err {
+				t.Errorf("error = %q, want %q", r.Error, tc.err)
+			}
+			if r.Tries != tc.tries {
+				t.Errorf("tries = %d, want %d", r.Tries, tc.tries)
+			}
+			if r.Duration != tc.duration {
+				t.Errorf("duration = %v, want %v", r.Duration, tc.duration)
+			}
+		})
+	}
+}
+
+func TestListHistoryInvalidHostsJSON(t *testing.T) {
+	discardLogs(t)
+
+	dir := t.TempDir()
+	entry := makeHistoryEntry(t, dir, "2025-01-15", "10-30-00")
+	writeTestFile(t, filepath.Join(entry, "hosts.json"), "invalid json")
+
+	items, err := ListHistory(dir)
+	if err != nil {
+		t.Fatalf("ListHistory: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	// Hosts should be nil/empty when parsing fails
+	if len(items[0].Hosts) != 0 {
+		t.Errorf("hosts = %v, want empty", items[0].Hosts)
 	}
 }

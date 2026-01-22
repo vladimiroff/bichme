@@ -3,6 +3,7 @@ package bichme
 import (
 	"bytes"
 	"cmp"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,7 +21,7 @@ type HistoryItem struct {
 	Path     string
 	Time     time.Time
 	Duration time.Duration
-	Hosts    []string
+	Hosts    map[string]HostResult
 	Files    []string
 	Logs     []string
 	Command  string
@@ -41,15 +42,59 @@ func (hi HistoryItem) Read(p []byte) (n int, err error) {
 	return n, io.EOF
 }
 
+// Summary returns counts of succeeded and failed hosts.
+func (hi HistoryItem) Summary() (succeeded, failed int) {
+	for _, result := range hi.Hosts {
+		if result.Error == "" {
+			succeeded++
+		} else {
+			failed++
+		}
+	}
+	return succeeded, failed
+}
+
+// statusString returns a human-readable status for a host result.
+func statusString(r HostResult) string {
+	switch r.Error {
+	case "":
+		return "OK"
+	case "connection":
+		return "Connection Failed"
+	case "transfer":
+		return "Transfer Failed"
+	case "execution":
+		return "Execution Failed"
+	default:
+		return "Failed"
+	}
+}
+
 // WriteTo implements io.WriterTo.
 func (hi HistoryItem) WriteTo(w io.Writer) (n int64, err error) {
 	t, terr := fmt.Fprintf(w, "Start Time:\t%s\n", hi.Time)
 	d, derr := fmt.Fprintf(w, "Duration:\t%s\n", hi.Duration)
 	c, cerr := fmt.Fprintf(w, "Command:\t%s\n", hi.Command)
 	f, ferr := fmt.Fprintf(w, "Files:\t\t%s\n\n", strings.Join(hi.Files, "\n\t\t"))
-	h, herr := fmt.Fprintf(w, "Hosts:\t\t%s\n\n", strings.Join(hi.Hosts, "\n\t\t"))
+
+	hosts := slices.Sorted(maps.Keys(hi.Hosts))
+	okLines := make([]string, 0, len(hosts))
+	errLines := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		r := hi.Hosts[host]
+		if r.Error == "" {
+			okLines = append(okLines, fmt.Sprintf("%s:\t%d tries in %s",
+				host, r.Tries, r.Duration.Round(time.Second)))
+		} else {
+			errLines = append(errLines, fmt.Sprintf("%s:\t%s in %s",
+				host, statusString(r), r.Duration.Round(time.Second)))
+		}
+	}
+
+	s, serr := fmt.Fprintf(w, "Succeeded (%d):\n\t\t%s\n\n", len(okLines), strings.Join(okLines, "\n\t\t"))
+	e, eerr := fmt.Fprintf(w, "Failed (%d):\n\t\t%s\n\n", len(errLines), strings.Join(errLines, "\n\t\t"))
 	l, lerr := fmt.Fprintf(w, "Logs:\t\t%s\n\n", strings.Join(hi.Logs, "\n\t\t"))
-	return int64(t + d + f + c + h + l), errors.Join(err, terr, derr, cerr, ferr, herr, lerr)
+	return int64(t + d + f + c + s + e + l), errors.Join(err, terr, derr, cerr, ferr, serr, eerr, lerr)
 }
 
 // Delete the underlying state directory.
@@ -117,17 +162,18 @@ func ListHistory(root string) ([]HistoryItem, error) {
 				for i, file := range files {
 					entry.Files[i] = string(file)
 				}
-			case "hosts":
+			case "hosts.json":
 				f, err := fs.ReadFile(fsys, path)
 				if err != nil {
-					slog.Error("Failed to read hosts", "path", path, "error", err)
+					slog.Error("Failed to read hosts.json", "path", path, "error", err)
 					return nil
 				}
-				hosts := bytes.Split(f, newline)
-				entry.Hosts = make([]string, len(hosts))
-				for i, host := range hosts {
-					entry.Hosts[i] = strings.SplitN(string(host), ":", 2)[0]
+				var hosts map[string]HostResult
+				if err := json.Unmarshal(f, &hosts); err != nil {
+					slog.Error("Failed to parse hosts.json", "path", path, "error", err)
+					return nil
 				}
+				entry.Hosts = hosts
 			case "duration":
 				f, err := fs.ReadFile(fsys, path)
 				if err != nil {

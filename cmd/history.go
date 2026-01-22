@@ -34,12 +34,13 @@ The history location can be changed with --history-path.`,
 			die("ERROR: %v\n", err)
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 0, ' ', tabwriter.Debug|tabwriter.TabIndent)
-		fmt.Fprintln(w, "ID\t Start Time \t Duration \t Hosts \t Files \t Command ")
-		fmt.Fprintln(w, "------\t---------------------\t----------\t-------\t-------\t--------------")
+		fmt.Fprintln(w, "ID\t Start Time \t Duration \t OK \t Fail \t Files \t Command ")
+		fmt.Fprintln(w, "------\t---------------------\t----------\t----\t------\t-------\t--------------")
 		for i, item := range items {
-			fmt.Fprintf(w, " %d\t %s\t %s\t %d\t %d\t %s\n",
+			succeeded, failed := item.Summary()
+			fmt.Fprintf(w, " %d\t %s\t %s\t %d\t %d\t %d\t %s\n",
 				i+1, item.Time.Format(time.DateTime), item.Duration,
-				len(item.Hosts), len(item.Files), item.Command)
+				succeeded, failed, len(item.Files), item.Command)
 		}
 		w.Flush()
 	},

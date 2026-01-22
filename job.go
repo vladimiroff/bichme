@@ -41,6 +41,10 @@ type Job struct {
 
 	// what the job should do
 	tasks Tasks
+
+	// timing
+	start    time.Time
+	duration time.Duration
 }
 
 func (j Job) hostname() string { return strings.SplitN(j.host, ":", 2)[0] }
@@ -74,15 +78,18 @@ func (j *Job) Start(ctx context.Context) error {
 		return err
 	}
 
+	if j.start.IsZero() {
+		j.start = time.Now()
+	}
 	j.tries++
 	j.out = NewOutput(j.hostname())
 
 	var err error
 	defer func() {
 		if err == nil || j.tries > j.maxRetries {
+			j.duration = time.Since(j.start)
 			j.tasks = 0
 		}
-		// TODO: recognize err type and fill j.(conn|file|exec|)Err
 		if err != nil {
 			fmt.Fprintf(j.out, "\nERROR: %v\n", err)
 		}

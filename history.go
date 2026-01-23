@@ -65,6 +65,8 @@ func statusString(r HostResult) string {
 		return "Transfer Failed"
 	case "execution":
 		return "Execution Failed"
+	case "canceled":
+		return "Canceled"
 	default:
 		return "Failed"
 	}

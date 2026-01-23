@@ -1,6 +1,7 @@
 package bichme
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -26,6 +27,8 @@ func WriteStats(w io.Writer, archive map[*Job]error) error {
 			statuses["file"] += 1
 		case errors.Is(err, ErrExecution):
 			statuses["exec"] += 1
+		case errors.Is(err, context.Canceled):
+			statuses["canceled"] += 1
 		default:
 			slog.Debug("Job is in a bad state", "host", job.host, "error", err)
 		}
@@ -43,6 +46,9 @@ func WriteStats(w io.Writer, archive map[*Job]error) error {
 	}
 	if statuses["running"] > 0 {
 		fmt.Fprintf(w, " Running:\t\t%d\n", statuses["running"])
+	}
+	if statuses["canceled"] > 0 {
+		fmt.Fprintf(w, " Canceled:\t\t%d\n", statuses["canceled"])
 	}
 	if statuses["done"] > 0 {
 		fmt.Fprintf(w, " Done:\t\t\t%d\n", statuses["done"])

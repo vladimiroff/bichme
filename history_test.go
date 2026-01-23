@@ -2,6 +2,7 @@ package bichme
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -359,6 +360,7 @@ func TestWriteHostsJSON(t *testing.T) {
 		{host: "host2.example.com", tries: 3, duration: 30 * time.Second}: ErrConnection,
 		{host: "host3.example.com", tries: 2, duration: 20 * time.Second}: ErrFileTransfer,
 		{host: "host4.example.com", tries: 1, duration: 5 * time.Second}:  ErrExecution,
+		{host: "host5.example.com", tries: 2, duration: 6 * time.Second}:  context.Canceled,
 	}
 
 	if err := writeHostsJSON(entry, archive); err != nil {
@@ -375,7 +377,7 @@ func TestWriteHostsJSON(t *testing.T) {
 	}
 
 	hosts := items[0].Hosts
-	if len(hosts) != 4 {
+	if len(hosts) != len(archive) {
 		t.Fatalf("got %d hosts, want 4", len(hosts))
 	}
 
@@ -389,6 +391,7 @@ func TestWriteHostsJSON(t *testing.T) {
 		{"host2.example.com", "connection", 3, 30 * time.Second},
 		{"host3.example.com", "transfer", 2, 20 * time.Second},
 		{"host4.example.com", "execution", 1, 5 * time.Second},
+		{"host5.example.com", "canceled", 2, 6 * time.Second},
 	}
 
 	for _, tc := range tests {

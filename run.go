@@ -68,6 +68,8 @@ func writeHostsJSON(path string, archive map[*Job]error) error {
 				result.Error = "transfer"
 			case errors.Is(err, ErrExecution):
 				result.Error = "execution"
+			case errors.Is(err, context.Canceled):
+				result.Error = "canceled"
 			default:
 				result.Error = "unknown"
 			}

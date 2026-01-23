@@ -79,6 +79,8 @@ func writeHostsJSON(path string, archive map[*Job]error) error {
 	return writeMetaFile(path, "hosts.json", string(data))
 }
 
+// Run  parallel SSH command executions across multiple servers with automatic
+// retry, output aggregation, and optional execution history.
 func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	start := time.Now()
 	auths := loadSSHAuth()
@@ -87,8 +89,8 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		return fmt.Errorf("load host key verification: %w", err)
 	}
 
-	jobCh := make(chan *Job)
-	resCh := make(chan jobResult)
+	jobCh := make(chan *Job, opts.Workers)
+	resCh := make(chan jobResult, opts.Workers)
 	var wg sync.WaitGroup
 	wg.Add(opts.Workers)
 	for range opts.Workers {
@@ -129,48 +131,56 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		}(start)
 		opts.HistoryPath = path
 	}
-	for _, server := range servers {
-		user := opts.User
-		if strings.Contains(server, "@") {
-			parts := strings.Split(server, "@")
-			user = parts[0]
-			server = parts[1]
-		}
 
-		hostKey := hostKeyVerifier(server)
-		cfg := &ssh.ClientConfig{
-			User:              user,
-			Auth:              auths,
-			HostKeyCallback:   hostKey.Callback,
-			HostKeyAlgorithms: hostKey.Algorithms,
-			Timeout:           opts.ConnTimeout,
-			ClientVersion:     "SSH-2.0-bichme-" + Version(),
-		}
+	go func() {
+		for _, server := range servers {
+			user := opts.User
+			if strings.Contains(server, "@") {
+				parts := strings.Split(server, "@")
+				user = parts[0]
+				server = parts[1]
+			}
 
-		var path string
-		if opts.Tasks.Has(UploadTask) {
-			path = opts.UploadPath
-		} else if opts.Tasks.Has(DownloadTask) {
-			path = opts.DownloadPath
-		}
+			hostKey := hostKeyVerifier(server)
+			cfg := &ssh.ClientConfig{
+				User:              user,
+				Auth:              auths,
+				HostKeyCallback:   hostKey.Callback,
+				HostKeyAlgorithms: hostKey.Algorithms,
+				Timeout:           opts.ConnTimeout,
+				ClientVersion:     "SSH-2.0-bichme-" + Version(),
+			}
 
-		j := &Job{
-			host:        server,
-			cmd:         cmd,
-			sshConfig:   cfg,
-			tasks:       opts.Tasks,
-			port:        opts.Port,
-			execTimeout: opts.ExecTimeout,
-			maxRetries:  opts.Retries,
-			files:       opts.Files,
-			path:        path,
-			historyPath: opts.HistoryPath,
-		}
+			var path string
+			if opts.Tasks.Has(UploadTask) {
+				path = opts.UploadPath
+			} else if opts.Tasks.Has(DownloadTask) {
+				path = opts.DownloadPath
+			}
 
-		jobs[server] = j
-		archive[j] = nil
-		jobCh <- j
-	}
+			j := &Job{
+				host:        server,
+				cmd:         cmd,
+				sshConfig:   cfg,
+				tasks:       opts.Tasks,
+				port:        opts.Port,
+				execTimeout: opts.ExecTimeout,
+				maxRetries:  opts.Retries,
+				files:       opts.Files,
+				path:        path,
+				historyPath: opts.HistoryPath,
+			}
+
+			jobs[server] = j
+			archive[j] = nil
+
+			select {
+			case jobCh <- j:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	var once sync.Once
 	finish := func() {
@@ -203,7 +213,12 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 				delete(jobs, res.host)
 			} else if !closing {
 				archive[job] = nil
-				jobCh <- job
+				go func() {
+					select {
+					case jobCh <- job:
+					case <-ctx.Done():
+					}
+				}()
 			}
 
 			if len(jobs) == 0 {

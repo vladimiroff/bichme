@@ -260,9 +260,12 @@ func (j *Job) Exec(ctx context.Context) error {
 	session.Stderr = j.out
 	session.Stdout = j.out
 
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 	go func() { errCh <- session.Run(j.cmd + "\n") }()
 	select {
+	case <-ctx.Done():
+		session.Close()
+		return ctx.Err()
 	case <-time.After(j.execTimeout):
 		return os.ErrDeadlineExceeded
 	case err = <-errCh:

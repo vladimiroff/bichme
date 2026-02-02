@@ -413,6 +413,36 @@ func TestJobExec(t *testing.T) {
 	}
 }
 
+func TestJobExecCancelledMidExecution(t *testing.T) {
+	started := make(chan struct{})
+	sshDialHandlerMock(t, blockingExecHandler(started))
+
+	j := &Job{host: "h", port: 22, execTimeout: 10 * time.Second, out: NewOutput("h")}
+	defer j.Close()
+
+	if err := j.Dial(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- j.Exec(ctx) }()
+
+	<-started
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("expected context.Canceled, got: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Exec did not return after context cancellation")
+	}
+}
+
 func TestJobUpload(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		localFile := writeTestFile(t, "script.sh", testFileContent)

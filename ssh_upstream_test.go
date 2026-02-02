@@ -301,3 +301,27 @@ func rejectSFTPHandler() requestHandler {
 		return false
 	}
 }
+
+// blockingExecHandler returns a handler that accepts exec requests then blocks
+// until the channel is closed. It signals on the started channel after accepting
+// the request, allowing tests to know when to cancel the context.
+func blockingExecHandler(started chan<- struct{}) sshHandler {
+	return func(ch ssh.Channel, in <-chan *ssh.Request, t *testing.T) {
+		defer ch.Close()
+
+		req, ok := <-in
+		if !ok {
+			t.Error("expected exec request")
+			return
+		}
+		if req.Type != "exec" {
+			t.Errorf("expected exec request, got %q", req.Type)
+			return
+		}
+		req.Reply(true, nil)
+		close(started)
+
+		// Block until channel is closed by the client.
+		io.Copy(io.Discard, ch)
+	}
+}

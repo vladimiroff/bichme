@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -134,55 +136,57 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		opts.HistoryPath = path
 	}
 
-	go func() {
-		for _, server := range servers {
-			user := opts.User
-			if strings.Contains(server, "@") {
-				parts := strings.Split(server, "@")
-				user = parts[0]
-				server = parts[1]
-			}
+	for _, server := range servers {
+		user := opts.User
+		if strings.Contains(server, "@") {
+			parts := strings.Split(server, "@")
+			user = parts[0]
+			server = parts[1]
+		}
 
-			hostKey := hostKeyVerifier(server)
-			cfg := &ssh.ClientConfig{
-				User:              user,
-				Auth:              auths,
-				HostKeyCallback:   hostKey.Callback,
-				HostKeyAlgorithms: hostKey.Algorithms,
-				Timeout:           opts.ConnTimeout,
-				ClientVersion:     "SSH-2.0-bichme-" + Version(),
-			}
+		hostKey := hostKeyVerifier(server)
+		cfg := &ssh.ClientConfig{
+			User:              user,
+			Auth:              auths,
+			HostKeyCallback:   hostKey.Callback,
+			HostKeyAlgorithms: hostKey.Algorithms,
+			Timeout:           opts.ConnTimeout,
+			ClientVersion:     "SSH-2.0-bichme-" + Version(),
+		}
 
-			var path string
-			if opts.Tasks.Has(UploadTask) {
-				path = opts.UploadPath
-			} else if opts.Tasks.Has(DownloadTask) {
-				path = opts.DownloadPath
-			}
+		var path string
+		if opts.Tasks.Has(UploadTask) {
+			path = opts.UploadPath
+		} else if opts.Tasks.Has(DownloadTask) {
+			path = opts.DownloadPath
+		}
 
-			j := &Job{
-				host:        server,
-				cmd:         cmd,
-				sshConfig:   cfg,
-				tasks:       opts.Tasks,
-				port:        opts.Port,
-				execTimeout: opts.ExecTimeout,
-				maxRetries:  opts.Retries,
-				files:       opts.Files,
-				path:        path,
-				historyPath: opts.HistoryPath,
-			}
+		j := &Job{
+			host:        server,
+			cmd:         cmd,
+			sshConfig:   cfg,
+			tasks:       opts.Tasks,
+			port:        opts.Port,
+			execTimeout: opts.ExecTimeout,
+			maxRetries:  opts.Retries,
+			files:       opts.Files,
+			path:        path,
+			historyPath: opts.HistoryPath,
+		}
 
-			jobs[server] = j
-			archive[j] = nil
+		jobs[server] = j
+		archive[j] = nil
+	}
 
+	go func(jobs []*Job) {
+		for _, j := range jobs {
 			select {
 			case jobCh <- j:
 			case <-ctx.Done():
 				return
 			}
 		}
-	}()
+	}(slices.Collect(maps.Values(jobs)))
 
 	var once sync.Once
 	finish := func() {

@@ -13,8 +13,8 @@ check free space with `df -h /` on everything and call it monitoring. Or maybe
 you want to do a mass-upgrade for the latest CVE with a domain and logo.
 
 bichme connects to multiple servers via SSH in parallel, executes commands or
-scripts, and aggregates the output. No YAML. No inventory files. No plugins.
-Just a list of hosts and a command.
+scripts, transfer files, and aggregates the output. No YAML. No inventory
+files. No plugins. Just a list of hosts and a command.
 
 ## Installation
 

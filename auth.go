@@ -1,7 +1,6 @@
 package bichme
 
 import (
-	"errors"
 	"log/slog"
 	"net"
 	"os"
@@ -118,10 +117,6 @@ func loadHostKeyVerifier(insecure bool) (hostKeyVerifier, error) {
 	systemKnownHosts := "/etc/ssh/ssh_known_hosts"
 	if _, err := os.Stat(systemKnownHosts); err == nil {
 		files = append(files, systemKnownHosts)
-	}
-
-	if len(files) == 0 {
-		return nil, errors.New("no ssh known_hosts files found")
 	}
 
 	db, err := knownhosts.NewDB(files...)

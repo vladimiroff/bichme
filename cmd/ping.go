@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"vld.bg/bichme"
@@ -37,7 +38,31 @@ Examples:
 		if err != nil {
 			return fmt.Errorf("read servers: %w", err)
 		}
-		return bichme.Run(cmd.Context(), hosts, "", opts(bichme.PingTask))
+
+		o := opts(bichme.PingTask)
+		var collector *bichme.KeyCollector
+		if !insecure {
+			collector = &bichme.KeyCollector{}
+			o.KeyCollector = collector
+		}
+
+		if err := bichme.Run(cmd.Context(), hosts, "", o); err != nil {
+			return err
+		}
+
+		if collector != nil {
+			pending := collector.Keys()
+			if len(pending) > 0 {
+				ok, err := bichme.Prompt(pending, os.Stdout, os.Stdin)
+				if err != nil {
+					return err
+				}
+				if ok {
+					return bichme.WriteToKnownHosts(pending)
+				}
+			}
+		}
+		return nil
 	},
 }
 

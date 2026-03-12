@@ -118,6 +118,23 @@ Test SSH connectivity to multiple machines without executing any commands.
 bichme ping <servers-file> [flags]
 ```
 
+When a host's key is not yet in `~/.ssh/known_hosts`, bichme collects it during
+the connection attempt. After all hosts have been contacted, any unknown keys
+are printed with their fingerprints and you are prompted once to add them all:
+
+```
+3 unknown host key(s) were encountered:
+
+  web01.example.com:22  ssh-ed25519  SHA256:abc123...
+  web02.example.com:22  ssh-ed25519  SHA256:def456...
+  db01.example.com:22   ssh-ed25519  SHA256:ghi789...
+
+Add these keys to ~/.ssh/known_hosts? [y/N]:
+```
+
+If `~/.ssh/known_hosts` does not exist it is created automatically. Use
+`--insecure` to skip host key verification entirely.
+
 Example:
 
 ```sh
@@ -190,7 +207,9 @@ eval $(ssh-agent)
 ssh-add
 ```
 
-Host keys are verified against `~/.ssh/known_hosts` and `/etc/ssh/ssh_known_hosts`. Use the `--insecure` flag to skip verification (not recommended).
+Host keys are verified against `~/.ssh/known_hosts` and `/etc/ssh/ssh_known_hosts`.
+Unknown hosts are handled interactively by `bichme ping` — see the [ping](#ping)
+section above. Use `--insecure` to skip verification entirely (not recommended).
 
 ## Runtime Signals
 

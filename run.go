@@ -44,6 +44,7 @@ type Opts struct {
 	Insecure     bool
 	DownloadPath string
 	Tasks        Tasks
+	KeyCollector *KeyCollector
 }
 
 type jobResult struct {
@@ -145,11 +146,19 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		}
 
 		hostKey := hostKeyVerifier(server)
+		callback := hostKey.Callback
+		algorithms := hostKey.Algorithms
+		if opts.KeyCollector != nil {
+			callback = opts.KeyCollector.Callback(callback)
+			if len(algorithms) == 0 {
+				algorithms = preferredHostKeyAlgos
+			}
+		}
 		cfg := &ssh.ClientConfig{
 			User:              user,
 			Auth:              auths,
-			HostKeyCallback:   hostKey.Callback,
-			HostKeyAlgorithms: hostKey.Algorithms,
+			HostKeyCallback:   callback,
+			HostKeyAlgorithms: algorithms,
 			Timeout:           opts.ConnTimeout,
 			ClientVersion:     "SSH-2.0-bichme-" + Version(),
 		}

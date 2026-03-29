@@ -155,29 +155,6 @@ bichme history purge --older-than 24h # delete older than 24h
 bichme history purge --all            # delete everything
 ```
 
-## Flags
-
-Common flags for `shell` and `exec`:
-
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--user` | `-u` | current user | SSH user to connect as |
-| `--port` | `-p` | 22 | SSH port |
-| `--workers` | `-w` | 10 | Number of parallel connections |
-| `--retries` | `-r` | 5 | Retry count for failed operations |
-| `--conn-timeout` | | 30s | Connection timeout |
-| `--exec-timeout` | `-t` | 1h | Execution timeout |
-| `--history` | | true | Record execution in history |
-| `--insecure` | `-i` | false | Skip host key verification |
-
-Global flags:
-
-| Flag             | Short | Default                          | Description                  |
-| ---------------- | ----- | -------------------------------- | ---------------------------- |
-| `--verbose`      | `-v`  | false                            | Enable debug output          |
-| `--history-path` |       | `~/.local/state/bichme/history/` | Where to store history       |
-| `--upload-path`  |       | `~`                              | Remote directory for uploads |
-
 ## Hosts File Format
 
 One host per line. Empty lines and comments (starting with `#`) are ignored.

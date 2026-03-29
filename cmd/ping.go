@@ -24,7 +24,7 @@ Examples:
   bichme ping servers.txt
   bichme ping servers.txt -w 50
   bichme ping servers.txt --conn-timeout 5s`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MinimumNArgs(1),
 	PreRunE: func(_ *cobra.Command, _ []string) error {
 		return errors.Join(
 			minInt("port", port, 0), maxInt("port", port, 65535),

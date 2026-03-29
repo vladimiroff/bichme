@@ -11,14 +11,14 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 )
 
-// loadSSHAuth returns SSH auth methods by trying the SSH agent first,
-// then identity files inside ~/.ssh/ (just like OpenSSH does).
-func loadSSHAuth() []ssh.AuthMethod {
+// joinSigners merges multiple signer slices into a single ssh.AuthMethod.
+// Returns nil if no signers are provided.
+func joinSigners(groups ...[]ssh.Signer) []ssh.AuthMethod {
 	var signers []ssh.Signer
-	signers = append(signers, loadSSHAgent()...)
-	signers = append(signers, loadIdentityFiles()...)
+	for _, g := range groups {
+		signers = append(signers, g...)
+	}
 	if len(signers) == 0 {
-		slog.Warn("No valid SSH signers found")
 		return nil
 	}
 	return []ssh.AuthMethod{ssh.PublicKeys(signers...)}
@@ -68,6 +68,20 @@ func loadIdentityFiles() []ssh.Signer {
 	for _, name := range defaultIdentityFiles {
 		keyPath := filepath.Join(sshDir, name)
 		signer, err := loadPrivateKey(keyPath)
+		if err != nil {
+			continue
+		}
+		signers = append(signers, signer)
+	}
+	return signers
+}
+
+// loadConfigIdentityFiles loads private keys from explicit file paths
+// (typically from SSH config IdentityFile directives).
+func loadConfigIdentityFiles(paths []string) []ssh.Signer {
+	var signers []ssh.Signer
+	for _, path := range paths {
+		signer, err := loadPrivateKey(path)
 		if err != nil {
 			continue
 		}

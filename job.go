@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -47,8 +48,6 @@ type Job struct {
 	duration time.Duration
 }
 
-func (j Job) hostname() string { return strings.SplitN(j.host, ":", 2)[0] }
-
 // Close implements io.Closer. Close is idempotent; calling it multiple times
 // returns nil after the first call.
 func (j *Job) Close() error {
@@ -82,7 +81,7 @@ func (j *Job) Start(ctx context.Context) error {
 		j.start = time.Now()
 	}
 	j.tries++
-	j.out = NewOutput(j.hostname())
+	j.out = NewOutput(j.host)
 
 	var err error
 	defer func() {
@@ -96,7 +95,7 @@ func (j *Job) Start(ctx context.Context) error {
 	}()
 
 	if j.tasks.Has(KeepHistoryTask) {
-		filename := filepath.Join(j.historyPath, fmt.Sprintf("%s_%d.log", j.hostname(), j.tries))
+		filename := filepath.Join(j.historyPath, fmt.Sprintf("%s_%d.log", j.host, j.tries))
 		f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 		if err != nil {
 			slog.Error("Failed to open output file", "host", j.host, "error", err)
@@ -195,7 +194,7 @@ func (j *Job) Download(ctx context.Context) error {
 		return nil
 	}
 
-	localDir := filepath.Join(j.path, j.hostname())
+	localDir := filepath.Join(j.path, j.host)
 	if err := download(ctx, j.sftp, localDir, matched...); err != nil {
 		return fmt.Errorf("download: %w", err)
 	}
@@ -227,11 +226,7 @@ func (j *Job) Dial(ctx context.Context) error {
 		return err
 	}
 
-	addr := j.host
-	if !strings.Contains(addr, ":") { // TODO: move this while parsing
-		addr += fmt.Sprintf(":%d", j.port)
-	}
-
+	addr := net.JoinHostPort(j.host, strconv.Itoa(j.port))
 	ch := make(chan error)
 	go func() {
 		client, err := sshDial("tcp", addr, j.sshConfig)

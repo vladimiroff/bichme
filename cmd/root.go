@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	osUser "os/user"
 	"slices"
 	"strings"
 	"time"
@@ -55,25 +54,24 @@ func opts(t bichme.Tasks) bichme.Opts {
 	}
 
 	return bichme.Opts{
-		User:         user,
-		Port:         port,
-		Retries:      retries,
-		Workers:      workers,
-		Files:        files,
-		ConnTimeout:  connectTimeout,
-		ExecTimeout:  executeTimeout,
-		History:      history,
-		HistoryPath:  historyPath,
-		UploadPath:   uploadPath,
-		Insecure:     insecure,
+		User:        user,
+		Port:        port,
+		Retries:     retries,
+		Workers:     workers,
+		Files:       files,
+		ConnTimeout: connectTimeout,
+		ExecTimeout: executeTimeout,
+		History:     history,
+		HistoryPath: historyPath,
+		UploadPath:  uploadPath,
+		Insecure:    insecure,
 		DownloadPath: outputPath,
-		Tasks:        t,
+		Tasks:       t,
 	}
 }
 
 // readHosts reads filename and returns all the hosts from inside, sorted with
-// removed duplicates. It ignores empty lines and treats # as comments. For
-// each host with a port suffix, the given (or default --port) value is used.
+// removed duplicates. It ignores empty lines and treats # as comments.
 func readHosts(filename string) ([]string, error) {
 	f, err := os.Open(filename)
 	if err != nil {
@@ -87,10 +85,6 @@ func readHosts(filename string) ([]string, error) {
 		line := strings.TrimSpace(strings.Split(scanner.Text(), "#")[0])
 		if len(line) == 0 {
 			continue
-		}
-
-		if !strings.Contains(line, ":") {
-			line += fmt.Sprintf(":%d", port)
 		}
 		lines = append(lines, line)
 	}
@@ -129,19 +123,6 @@ func Execute(ctx context.Context) {
 func die(format string, v ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", v...)
 	os.Exit(1)
-}
-
-// defaultUser to login as if -u|--user is not passed.
-//
-// TODO: should probably figure out a way to allow overriding that via
-// ~/.ssh/config on a per-host basis.
-func defaultUser() string {
-	user, err := osUser.Current()
-	if err != nil {
-		slog.Error("Failed to get current user, using 'root' as default user", "error", err)
-		return "root"
-	}
-	return user.Username
 }
 
 func init() {

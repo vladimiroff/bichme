@@ -31,8 +31,7 @@ Examples:
 	Args: cobra.MinimumNArgs(2),
 	PreRunE: func(_ *cobra.Command, _ []string) error {
 		return errors.Join(
-			minLen("user", user, 1),
-			minInt("port", port, 1), maxInt("port", port, 65535),
+			minInt("port", port, 0), maxInt("port", port, 65535),
 			minInt("workers", workers, 1),
 			minInt("retries", retries, 1),
 		)
@@ -48,8 +47,8 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(shellCmd)
-	shellCmd.Flags().StringVarP(&user, "user", "u", defaultUser(), "user to login as")
-	shellCmd.Flags().IntVarP(&port, "port", "p", 22, "SSH port to connect to")
+	shellCmd.Flags().StringVarP(&user, "user", "u", "", "user to login as")
+	shellCmd.Flags().IntVarP(&port, "port", "p", 0, "SSH port to connect to")
 	shellCmd.Flags().IntVarP(&retries, "retries", "r", 5, "how many retries to perform on failed executions")
 	shellCmd.Flags().IntVarP(&workers, "workers", "w", 10, "how many workers to execute commands in parallel")
 	shellCmd.Flags().DurationVar(&connectTimeout, "conn-timeout", 30*time.Second, "connection timeout")

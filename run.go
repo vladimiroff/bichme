@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -77,7 +79,7 @@ func writeHostsJSON(path string, archive map[*Job]error) error {
 				result.Error = "unknown"
 			}
 		}
-		results[job.hostname()] = result
+		results[job.host] = result
 	}
 
 	data, _ := json.MarshalIndent(results, "", "  ")
@@ -88,8 +90,10 @@ func writeHostsJSON(path string, archive map[*Job]error) error {
 // retry, output aggregation, and optional execution history.
 func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 	start := time.Now()
-	auths := loadSSHAuth()
-	hostKeyVerifier, err := loadHostKeyVerifier(opts.Insecure)
+	agentSigners := loadSSHAgent()
+	defaultAuths := joinSigners(agentSigners, loadIdentityFiles())
+	sshConfigFor := loadSSHConfig()
+	hostVerifier, err := loadHostKeyVerifier(opts.Insecure)
 	if err != nil {
 		return fmt.Errorf("load host key verification: %w", err)
 	}
@@ -137,17 +141,21 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		opts.HistoryPath = path
 	}
 
-	for _, server := range servers {
-		user := opts.User
-		if strings.Contains(server, "@") {
-			parts := strings.Split(server, "@")
-			user = parts[0]
-			server = parts[1]
+	osUser := currentUser()
+	for _, entry := range servers {
+		user, alias, inlinePort := parseServer(entry)
+		hostCfg := sshConfigFor(alias)
+		host := pick(alias, hostCfg.Hostname)
+		port := pick(inlinePort, opts.Port, hostCfg.Port, 22)
+		auths := defaultAuths
+		if len(hostCfg.IdentityFiles) > 0 {
+			configSigners := loadConfigIdentityFiles(hostCfg.IdentityFiles)
+			auths = joinSigners(agentSigners, configSigners)
 		}
 
-		hostKey := hostKeyVerifier(server)
-		callback := hostKey.Callback
-		algorithms := hostKey.Algorithms
+		hkCfg := hostVerifier(net.JoinHostPort(host, strconv.Itoa(port)))
+		callback := hkCfg.Callback
+		algorithms := hkCfg.Algorithms
 		if opts.KeyCollector != nil {
 			callback = opts.KeyCollector.Callback(callback)
 			if len(algorithms) == 0 {
@@ -155,7 +163,7 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			}
 		}
 		cfg := &ssh.ClientConfig{
-			User:              user,
+			User:              pick(user, opts.User, hostCfg.User, osUser),
 			Auth:              auths,
 			HostKeyCallback:   callback,
 			HostKeyAlgorithms: algorithms,
@@ -171,11 +179,11 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 		}
 
 		j := &Job{
-			host:        server,
+			host:        host,
 			cmd:         cmd,
 			sshConfig:   cfg,
 			tasks:       opts.Tasks,
-			port:        opts.Port,
+			port:        port,
 			execTimeout: opts.ExecTimeout,
 			maxRetries:  opts.Retries,
 			files:       opts.Files,
@@ -183,7 +191,7 @@ func Run(ctx context.Context, servers []string, cmd string, opts Opts) error {
 			historyPath: opts.HistoryPath,
 		}
 
-		jobs[server] = j
+		jobs[host] = j
 		archive[j] = nil
 	}
 

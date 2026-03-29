@@ -3,6 +3,7 @@ module vld.bg/bichme
 go 1.25.6
 
 require (
+	github.com/kevinburke/ssh_config v1.6.0
 	github.com/pkg/sftp v1.13.10
 	github.com/skeema/knownhosts v1.3.2
 	github.com/spf13/cobra v1.10.2

@@ -32,8 +32,7 @@ Examples:
 	Args: cobra.ExactArgs(2),
 	PreRunE: func(_ *cobra.Command, _ []string) error {
 		return errors.Join(
-			minLen("user", user, 1),
-			minInt("port", port, 1), maxInt("port", port, 65535),
+			minInt("port", port, 0), maxInt("port", port, 65535),
 			minInt("workers", workers, 1),
 			minInt("retries", retries, 1),
 		)
@@ -63,8 +62,8 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(execCmd)
-	execCmd.Flags().StringVarP(&user, "user", "u", defaultUser(), "user to login as")
-	execCmd.Flags().IntVarP(&port, "port", "p", 22, "SSH port to connect to")
+	execCmd.Flags().StringVarP(&user, "user", "u", "", "user to login as")
+	execCmd.Flags().IntVarP(&port, "port", "p", 0, "SSH port to connect to")
 	execCmd.Flags().IntVarP(&retries, "retries", "r", 5, "how many retries to perform on failed executions")
 	execCmd.Flags().IntVarP(&workers, "workers", "w", 10, "how many workers to execute commands in parallel")
 	execCmd.Flags().StringArrayVarP(&files, "files", "f", nil, "additional files to be uploaded before execution")

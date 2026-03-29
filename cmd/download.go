@@ -26,8 +26,7 @@ Examples:
 	Args: cobra.MinimumNArgs(2),
 	PreRunE: func(_ *cobra.Command, _ []string) error {
 		return errors.Join(
-			minLen("user", user, 1),
-			minInt("port", port, 1), maxInt("port", port, 65535),
+			minInt("port", port, 0), maxInt("port", port, 65535),
 			minInt("workers", workers, 1),
 			minInt("retries", retries, 1),
 		)
@@ -44,8 +43,8 @@ Examples:
 
 func init() {
 	rootCmd.AddCommand(downloadCmd)
-	downloadCmd.Flags().StringVarP(&user, "user", "u", defaultUser(), "user to login as")
-	downloadCmd.Flags().IntVarP(&port, "port", "p", 22, "SSH port to connect to")
+	downloadCmd.Flags().StringVarP(&user, "user", "u", "", "user to login as")
+	downloadCmd.Flags().IntVarP(&port, "port", "p", 0, "SSH port to connect to")
 	downloadCmd.Flags().IntVarP(&retries, "retries", "r", 5, "how many retries to perform on failed downloads")
 	downloadCmd.Flags().IntVarP(&workers, "workers", "w", 10, "how many workers to download in parallel")
 	downloadCmd.Flags().DurationVar(&connectTimeout, "conn-timeout", 30*time.Second, "connection timeout")
